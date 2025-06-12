@@ -90,7 +90,7 @@ const processReservationPayment = asyncHandler(async (req, res) => {
     };
     await reservation.save();
 
-    res.status(400).json({ message: 'Pago rechazado, intenta nuevamente o usa otra tarjeta.' });
+    res.status(400).json({ message: paymentResult.message });
     return;
   }
 
@@ -177,6 +177,7 @@ const processReservationPayment = asyncHandler(async (req, res) => {
       reservationNumber: reservation.reservationNumber,
       totalCost: reservation.totalCost,
       paymentInfo: reservation.paymentInfo,
+      status: reservation.status,
     });
     console.log('--- DEBUG: processReservationPayment finalizado exitosamente ---');
     return;

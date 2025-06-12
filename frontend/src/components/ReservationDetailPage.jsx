@@ -82,6 +82,18 @@ const Message = styled.p.withConfig({
   text-align: center;
 `;
 
+const ReminderMessage = styled.p`
+  margin-top: 25px; // Espacio extra arriba
+  padding: 15px;
+  background-color: #e6f7ff; // Un azul claro
+  border: 1px solid #91d5ff;
+  border-radius: 8px;
+  color: #0047b3; // Un azul más oscuro para el texto
+  text-align: center;
+  font-size: 0.95em;
+  font-weight: 500;
+`;
+
 function ReservationDetailPage() {
   const { id } = useParams(); // este “id” es el _id de la reserva
   const navigate = useNavigate();
@@ -219,6 +231,16 @@ function ReservationDetailPage() {
           </Value>
         </Section>
       )}
+      
+      
+      {/* Mostrar el mensaje de recordatorio solo si la reserva está confirmada */}
+      {console.log('DEBUG [ReservationDetailPage]: reservation.status para recordatorio:', reservation.status)} // 5. Log de la condición exacta
+      {reservation.status === 'confirmed' && (
+        <ReminderMessage>
+          Recibirás un recordatorio por email 2 días antes de la fecha de retiro de tu vehículo.
+        </ReminderMessage>
+      )}
+
 
       <div>
         <Button

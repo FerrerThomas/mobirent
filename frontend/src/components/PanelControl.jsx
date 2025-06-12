@@ -4,7 +4,7 @@ import styled from "styled-components";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const HomePageContainer = styled.div`
-    background-color: #f0f2f5;
+    
     min-height: 100vh;
     padding: 80px 20px 40px;
     box-sizing: border-box;
@@ -12,7 +12,7 @@ const HomePageContainer = styled.div`
     display: flex; // Usamos flexbox para la distribución lateral
     gap: 20px; // Espacio entre el filtro y el contenido principal
     // No usamos justify-content: center aquí para que MainContent ocupe todo el espacio a la derecha
-    align-items: flex-start; // Alinea la sidebar y el main content al inicio
+    align-items: center; // Alinea la sidebar y el main content al inicio
 
     @media (max-width: 768px) {
         flex-direction: column; // Apila los elementos en pantallas pequeñas
@@ -27,6 +27,7 @@ const MainContent = styled.div`
     background-color: #fff;
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    
     // REMOVED: text-align: center; // Quitamos esto para que el contenido dentro de las tarjetas no se centre por defecto
 
     @media (max-width: 768px) {
@@ -49,7 +50,7 @@ const WelcomeTitle = styled.h1`
 
 const SubText = styled.p`
     font-size: 1.1em;
-    color: #555;
+    color: #000;
     margin-bottom: 20px;
     text-align: center; // Mantenemos el subtítulo centrado
 
@@ -71,7 +72,7 @@ const ButtonGroup = styled.div`
 `;
 
 const ActionButton = styled(Link)`
-    background-color: #007bff;
+    background-color:rgb(0, 102, 255);
     color: white;
     padding: 18px 25px;
     border-radius: 8px;
@@ -84,57 +85,32 @@ const ActionButton = styled(Link)`
     justify-content: center;
     text-align: center;
     min-height: 20px;
-    width: 100%;           /* Ocupa todo el ancho disponible en la columna */
+    width: 80%;           /* Ocupa todo el ancho disponible en la columna */
 
     &:hover {
-        background-color: #0056b3;
+        
         transform: translateY(-3px);
     }
     &:active {
         transform: translateY(0);
     }
     &.secondary {
-        background-color: #6c757d;
+       
         &:hover {
-            background-color: #5a6268;
+            
         }
     }
 `;
 
-const LogoutButton = styled.button`
-    background-color: #dc3545;
-    color: white;
-    padding: 12px 25px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1.1em;
-    font-weight: bold;
-    margin-top: 10px; // Ajustado para el gap en ButtonGroup
-    transition: background-color 0.3s ease, transform 0.2s ease;
-
-    &:hover {
-        background-color: #c82333;
-        transform: translateY(-2px);
-    }
-
-    @media (max-width: 768px) {
-        padding: 10px 20px;
-        font-size: 1em;
-    }
-`;
 
 function PanelControl() {
-    const { user, logout } = useAuth();
+    const { user } = useAuth();
     // const location = useLocation();
     // const navigate = useNavigate();
 
     const username = user ? user.username : null;
     const userRole = user ? user.role : null;
 
-const handleLogout = () => {
-        logout();
-    };
 
 return (
     <HomePageContainer>
@@ -145,7 +121,7 @@ return (
                             Bienvenido, <span id="welcomeUsername">{username}</span>!
                         </WelcomeTitle>
                         <SubText>
-                            Esta es tu panel de control de {userRole ? userRole.toUpperCase() : 'N/A'}
+                            Esta es tu panel de control
                         </SubText>
                     </>
                 ) : (
@@ -175,9 +151,9 @@ return (
 
                             {userRole === "admin" && (
                                 <>
-                                    <ActionButton to="/admin-reports" className="secondary">
+                                    {/*<ActionButton to="/admin-reports" className="secondary">
                                         Ver Reportes Admin
-                                    </ActionButton>
+                                    </ActionButton>*/}
                                     <ActionButton to="/admin-users" className="secondary">
                                         Crear Usuarios
                                     </ActionButton>
@@ -189,9 +165,6 @@ return (
                                     </ActionButton>
                                 </>
                             )}
-                            <LogoutButton onClick={handleLogout}>
-                                Cerrar Sesión
-                            </LogoutButton>
                         </>
                     ) : (
                         <>

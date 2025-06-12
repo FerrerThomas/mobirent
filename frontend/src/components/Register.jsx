@@ -11,8 +11,8 @@ const RegisterPageContainer = styled.div`
   height: 100vh;
   background: linear-gradient(
     to right,
-    #6a11cb 0%,
-    #2575fc 100%
+rgb(86, 97, 255) 0%,
+rgb(0, 64, 175) 100%
   ); /* Gradiente azul/morado */
   display: flex;
   justify-content: center;
@@ -39,7 +39,7 @@ const RegisterFormWrapper = styled.div`
   z-index: 1;
   overflow-y: auto; /* Permite scroll si el contenido es demasiado largo en pantallas pequeñas */
   max-height: calc(
-    100vh - 120px
+    90vh - 120px
   ); /* Ajusta para que el formulario no exceda la altura de la pantalla */
 `;
 
@@ -52,7 +52,7 @@ const Title = styled.h1`
 const Form = styled.form`
   display: flex;
   flex-direction: column;
-  gap: 15px; /* Espacio entre los grupos de formulario */
+  gap: 3px; /* Espacio entre los grupos de formulario */
 `;
 
 const FormGroup = styled.div`
@@ -143,6 +143,9 @@ const Message = styled.p`
 `;
 
 function Register() {
+  const [name, setName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -198,7 +201,16 @@ function Register() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, email, password, dni, dateOfBirth }),
+        body: JSON.stringify({ 
+              name,             // ¡Añadido!
+              lastName,         // ¡Añadido!
+              phoneNumber,      // ¡Añadido!
+              username, 
+              email, 
+              password, 
+              dni, 
+              dateOfBirth 
+          }),
       });
 
       const data = await response.json();
@@ -213,6 +225,9 @@ function Register() {
         setConfirmPassword("");
         setDni("");
         setDateOfBirth("");
+        setName("");         // Añadido
+        setLastName("");     // Añadido
+        setPhoneNumber("");  // Añadido
         setTimeout(() => {
           navigate("/login"); // Redirige a la página de login usando navigate
         }, 2000);
@@ -240,6 +255,39 @@ function Register() {
               name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </FormGroup>
+          <FormGroup>
+            <Label htmlFor="regName">Nombre:</Label>
+            <Input
+              type="text"
+              id="regName"
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </FormGroup>
+          <FormGroup>
+            <Label htmlFor="regLastName">Apellido:</Label>
+            <Input
+              type="text"
+              id="regLastname"
+              name="lastName"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+            />
+          </FormGroup>
+          <FormGroup>
+            <Label htmlFor="regPhoneNumber">Telefono:</Label>
+            <Input
+              type="text"
+              id="regPhoneNumber"
+              name="phoneNumber"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
               required
             />
           </FormGroup>

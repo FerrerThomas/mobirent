@@ -173,7 +173,7 @@ const Navbar = () => {
                 {username ? ( // Si hay un nombre de usuario, significa que está logueado
                     <DropdownContainer>
                         <DropdownButton>
-                            Hola, {username} ({userRole.toUpperCase()})
+                            Hola, {username} ({userRole})
                         </DropdownButton>
                         <DropdownContent>
                             {/* Enlace a Mis Reservas para todos los logueados */}

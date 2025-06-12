@@ -6,9 +6,9 @@ const generateToken = require("../utils/generateToken");
 // @route   POST /api/admin/users
 // @access  Admin
 const createUserByAdmin = async (req, res) => {
-  const { username, email, password, dni, dateOfBirth, role } = req.body; // <-- RECIBE DNI y dateOfBirth
+  const { name, lastName, phoneNumber, username, email, password, dni, dateOfBirth, role } = req.body; // <-- RECIBE DNI y dateOfBirth
 
-  if (!username || !email || !password || !dni || !dateOfBirth) {
+  if (!name || !lastName || !phoneNumber || !username || !email || !password || !dni || !dateOfBirth) {
     // <-- VALIDA TODOS LOS CAMPOS
     return res
       .status(400)
@@ -62,6 +62,9 @@ const createUserByAdmin = async (req, res) => {
 
     // El rol 'user' se asigna por defecto
     const user = await User.create({
+      name,
+      lastName,
+      phoneNumber,
       username,
       email,
       password,
@@ -73,6 +76,9 @@ const createUserByAdmin = async (req, res) => {
     if (user) {
       res.status(201).json({
         _id: user._id,
+        name: user.name,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber,
         username: user.username,
         email: user.email,
         dni: user.dni, // <-- INCLUYE DNI EN LA RESPUESTA

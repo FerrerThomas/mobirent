@@ -365,6 +365,14 @@ const RentButtonStyled = styled.button`
   }
 `;
 
+const ErrorMessage = styled.p`
+    color: red;
+    font-size: 0.9em;
+    margin-top: -10px; // Ajusta el margen para que no se vea tan separado
+    margin-bottom: 10px;
+    text-align: center;
+`;
+
 function Home() {
     //const { user, logout } = useAuth();
     const [vehicles, setVehicles] = useState([]);
@@ -376,7 +384,7 @@ function Home() {
   const [pickupDate, setPickupDate] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [selectedType, setSelectedType] = useState("");
-
+  const [error, setError] = useState(null);
     //const username = user ? user.username : null;
     //const userRole = user ? user.role : null;
 
@@ -478,6 +486,32 @@ function Home() {
   }, [location.search, fetchAvailableVehicles]); // Depende de location.search, fetchAvailableVehicles y API_BASE_URL
 
   const handleApplyFilters = () => {
+      setError(null); // Limpiar cualquier error anterior
+
+      // **** INICIO DE LA NUEVA LÓGICA DE VALIDACIÓN DE FECHAS ****
+      if (pickupDate && returnDate) {
+          const pDate = new Date(pickupDate);
+          const rDate = new Date(returnDate);
+
+          pDate.setHours(0, 0, 0, 0);
+          rDate.setHours(0, 0, 0, 0);
+
+          // Validar que returnDate sea estrictamente mayor que pickupDate
+          if (rDate <= pDate) {
+              setError('La fecha de devolución debe ser mayor a la fecha de retiro.');
+              return; // Detiene la función si hay un error
+          }
+      } else if (pickupDate && !returnDate) {
+          setError('Por favor, selecciona una fecha de devolución.');
+          return;
+      } else if (!pickupDate && returnDate) {
+          setError('Por favor, selecciona una fecha para retirar el auto.');
+          return;
+      } else if (!pickupDate && !returnDate) {
+          setError('Por favor, selecciona una fecha para retirar el auto.');
+          return;
+      }
+
     // Redirigir a la misma página con los nuevos parámetros de búsqueda
     const params = new URLSearchParams();
     if (selectedBranch) params.append("branchId", selectedBranch);
@@ -506,6 +540,7 @@ function Home() {
     <HomePageContainer>
       <FilterSidebar>
         <h3>Filtros de Búsqueda</h3>
+        {error && <ErrorMessage>{error}</ErrorMessage>}
         <FilterGroup>
           <label htmlFor="branch">Sucursal:</label>
           <select

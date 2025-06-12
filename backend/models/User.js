@@ -4,6 +4,22 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      required: true,
+    },
+    lastName: {
+      type: String,
+      required: true,
+    },
+    phoneNumber: {
+      type: String,
+      required: true,
+      match: [
+        /^\d{8,15}$/,
+        "El TELEFONO debe contener entre 8 y 15 dígitos numéricos.",
+      ],
+    },
     username: {
       type: String,
       required: true,
@@ -91,5 +107,4 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 };
 
 const User = mongoose.model("User", userSchema);
-
-module.exports = mongoose.model('User', userSchema); // <--- ¡Esta línea es crucial!
+module.exports = User;

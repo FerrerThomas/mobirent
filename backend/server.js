@@ -9,6 +9,7 @@ const adminRoutes = require("./routes/adminRoutes"); // <-- NUEVO: Importa las r
 const branchRoutes = require("./routes/branchRoutes"); // Añade esta línea
 const reservationRoutes = require("./routes/reservationRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const { startReminderJob } = require("./utils/cronJobs");
 const app = express();
 
 app.use(express.json());
@@ -76,6 +77,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
+app.listen(PORT, () => { 
   console.log(`🚀 Servidor backend corriendo en http://localhost:${PORT}`);
+  
+    startReminderJob();
+    console.log('🔔 Tareas de recordatorio de email programadas iniciadas.');
+
+  // 2. Llama directamente a la función de ejecución para probarla ahora:
+  //console.log('🧪 Ejecutando tarea de recordatorio de email manualmente para prueba...');
+  //await executeReminderJob(); // ¡Llamada directa!
+  // --- FIN CAMBIOS PARA PRUEBA MANUAL ---
 });

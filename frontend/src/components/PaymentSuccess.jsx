@@ -55,6 +55,18 @@ const ErrorMessage = styled.p`
   margin-bottom: 20px;
 `;
 
+const ReminderMessage = styled.p`
+  margin-top: 25px;
+  padding: 15px;
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 8px;
+  color: #0047b3;
+  text-align: center;
+  font-size: 0.95em;
+  font-weight: 500;
+`;
+
 function PaymentSuccess() {
   const { reservationId } = useParams();
   const navigate = useNavigate();
@@ -169,7 +181,11 @@ function PaymentSuccess() {
         <Label>Estado:</Label>
         <Value style={{ textTransform: 'capitalize' }}>{reservation.status}</Value>
       </Section>
-
+      {reservation.status === 'confirmed' && (
+        <ReminderMessage>
+          Recibirás un recordatorio por email 2 días antes de la fecha de retiro de tu vehículo.
+        </ReminderMessage>
+      )}
       <Button onClick={() => navigate('/my-reservations')}>Ir a Mis Reservas</Button>
     </Container>
   );
