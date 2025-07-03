@@ -4,6 +4,7 @@ const Vehicle = require("../models/Vehicle");
 const Branch = require("../models/Branch"); // Importa el modelo Branch
 const asyncHandler = require("../middleware/asyncHandler");
 const ErrorResponse = require("../utils/errorResponse");
+
 // @desc    Crear un nuevo vehículo (solo para admin)
 // @route   POST /api/vehicles
 // @access  Admin

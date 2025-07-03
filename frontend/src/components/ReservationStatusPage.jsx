@@ -639,6 +639,9 @@ function ReservationStatusPage() {
   const [selectedAdicionales, setSelectedAdicionales] = useState([]); // Array de { _id: adicionalId, quantity: N }
   // *** FIN ESTADOS NUEVOS ***
 
+  // *** NUEVO ESTADO PARA EL MOTIVO DE MANTENIMIENTO ***
+  const [maintenanceReason, setMaintenanceReason] = useState("");
+
   useEffect(() => {
     const role = localStorage.getItem("userRole");
     setUserRole(role);
@@ -671,6 +674,7 @@ function ReservationStatusPage() {
     setError(null);
     setReservation(null); // Limpiar reserva anterior
     setSelectedAdicionales([]); // Limpiar adicionales seleccionados al buscar nueva reserva
+    setMaintenanceReason(""); // Limpiar motivo de mantenimiento al buscar nueva reserva
 
     try {
       // Usamos el endpoint '/reservations/byNumber/:reservationNumber' que se sugirió en el backend
@@ -709,6 +713,10 @@ function ReservationStatusPage() {
     setShowStatusConfirmModal(true);
     setStatusToChangeTo(newStatus);
     setStatusChangeError(null);
+    // Limpiar el motivo de mantenimiento si no vamos a "returned"
+    if (newStatus !== "returned") {
+      setMaintenanceReason("");
+    }
   };
 
   // *** FUNCIÓN PARA MANEJAR LA SELECCIÓN DE ADICIONALES EN EL MODAL ***
@@ -748,31 +756,57 @@ function ReservationStatusPage() {
     }
 
     try {
-      let updateBody = { status: statusToChangeTo };
+      let updateReservationBody = { status: statusToChangeTo };
 
-      // *** Lógica para ADICIONALES SOLO cuando el estado es "picked_up" ***
       if (statusToChangeTo === "picked_up") {
-        updateBody.adicionales = selectedAdicionales; // Incluir los adicionales seleccionados
-        // No necesitamos actualizar el vehículo aquí, el backend lo hará.
-        // Las líneas de axiosInstance.put(`/vehicles/...`) son redundantes si el backend maneja el estado del vehículo al cambiar el estado de la reserva.
-        // Se recomienda que el controlador de backend para 'updateReservationStatus' se encargue de la lógica del vehículo.
+        updateReservationBody.adicionales = selectedAdicionales;
       } else if (statusToChangeTo === "returned") {
-        // Al devolver, el vehículo vuelve a estar disponible (si no necesita mantenimiento)
-        // y la reserva pasa a "completed" después de este paso.
-        // Estas líneas también deberían ser manejadas por el backend en el updateReservationStatus
-        // para mantener una única fuente de verdad y evitar inconsistencias.
-        // Si el backend ya hace esto, puedes quitar las llamadas a /vehicles.
-        // updateBody.status = "completed"; // El backend ya lo hace.
+        if (!maintenanceReason || maintenanceReason.trim() === "") {
+          setStatusChangeError("El motivo de mantenimiento es obligatorio al marcar como devuelto.");
+          setStatusChangeLoading(false);
+          return;
+        }
+
+        // 1. Actualizar el estado del vehículo a mantenimiento
+        if (reservation.vehicle && reservation.vehicle._id) {
+          try {
+            await axiosInstance.put(
+              `/vehicles/${reservation.vehicle._id}/status`,
+              { needsMaintenance: true, maintenanceReason: maintenanceReason }
+            );
+            console.log(`Vehículo ${reservation.vehicle.licensePlate} (${reservation.vehicle._id}) marcado para mantenimiento.`);
+          } catch (vehicleErr) {
+            console.error("Error al actualizar el estado del vehículo a mantenimiento:", vehicleErr);
+            setStatusChangeError(
+              vehicleErr.response?.data?.message ||
+              "Error al actualizar el estado del vehículo a mantenimiento. Intenta de nuevo."
+            );
+            setStatusChangeLoading(false);
+            return; // Detener el proceso si falla la actualización del vehículo
+          }
+        } else {
+          // Esto no debería pasar si la reserva tiene un vehículo asociado
+          setStatusChangeError("No se encontró el ID del vehículo asociado a la reserva.");
+          setStatusChangeLoading(false);
+          return;
+        }
+        
+        // 2. La reserva pasará a "returned" y el backend la moverá a "completed" si corresponde.
+        // La actualización de la reserva se hará a continuación, fuera de este 'if'.
       }
 
+      // Actualizar el estado de la reserva
       await axiosInstance.put(
         `/reservations/${reservation._id}/status`, // Endpoint para actualizar status
-        updateBody // Envía el cuerpo con el nuevo estado y, si es "picked_up", los adicionales
+        updateReservationBody // Envía el cuerpo con el nuevo estado y, si es "picked_up", los adicionales
       );
+      
       alert(`Reserva actualizada a estado: ${statusToChangeTo.replace("_", " ")}`);
       setShowStatusConfirmModal(false);
+      setMaintenanceReason(""); // Limpiar el motivo de mantenimiento después de éxito
       fetchReservation(); // Recargar la reserva para ver el nuevo estado y los adicionales
       setSelectedAdicionales([]); // Limpiar selección después de confirmar
+
     } catch (err) {
       console.error(`Error al cambiar estado a ${statusToChangeTo}:`, err);
       setStatusChangeError(
@@ -782,7 +816,7 @@ function ReservationStatusPage() {
     } finally {
       setStatusChangeLoading(false);
     }
-  }, [reservation, statusToChangeTo, navigate, fetchReservation, selectedAdicionales]); // Dependencia de selectedAdicionales
+  }, [reservation, statusToChangeTo, navigate, fetchReservation, selectedAdicionales, maintenanceReason]); // Dependencia de selectedAdicionales y maintenanceReason
 
   const handleCancelReservation = () => {
     if (!reservation) return;
@@ -1105,6 +1139,25 @@ function ReservationStatusPage() {
             )}
             {/* *** FIN SECCIÓN DE ADICIONALES *** */}
 
+            {/* *** NUEVA SECCIÓN PARA MOTIVO DE MANTENIMIENTO PARA "RETURNED" *** */}
+            {statusToChangeTo === "returned" && (
+              <AdicionalesSection> {/* Reutilizando AdicionalesSection por estilos */}
+                <h4>Motivo de Mantenimiento:</h4>
+                <textarea
+                  value={maintenanceReason}
+                  onChange={(e) => setMaintenanceReason(e.target.value)}
+                  placeholder="Describe el motivo por el cual el vehículo requiere mantenimiento..."
+                  rows="4"
+                  required // Hace que el campo sea obligatorio
+                />
+                {statusChangeError && statusChangeError.includes("motivo") && (
+                  <p style={{ color: "red", marginTop: "5px" }}>{statusChangeError}</p>
+                )}
+              </AdicionalesSection>
+            )}
+            {/* *** FIN NUEVA SECCIÓN *** */}
+
+
             {statusChangeError && (
               <p style={{ color: "red" }}>{statusChangeError}</p>
             )}
@@ -1123,6 +1176,7 @@ function ReservationStatusPage() {
           </ModalContent>
         </ModalOverlay>
       )}
+      
     </PageContainer>
   );
 }
