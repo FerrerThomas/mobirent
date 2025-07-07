@@ -17,6 +17,34 @@ const calculateTotalCost = (startDate, endDate, vehiclePricePerDay) => {
   return diffDays * vehiclePricePerDay;
 };
 
+// Helper para recalcular el costo total de la reserva incluyendo adicionales
+const recalculateReservationTotalCost = async (reservation) => {
+    // Si la reserva no tiene vehicle o no tiene pricePerDay, manejar el error o devolver el costo actual
+    if (!reservation.vehicle || !reservation.vehicle.pricePerDay) {
+        console.warn('Advertencia: Vehículo o pricePerDay no disponibles para recalcular el costo base.');
+        // Considera si quieres lanzar un error o mantener el costo actual en este caso
+        return reservation.totalCost; // Devuelve el costo actual si no se puede recalcular base
+    }
+
+    const startDate = new Date(reservation.startDate);
+    const endDate = new Date(reservation.endDate);
+
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const durationInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    let recalculatedTotal = durationInDays * reservation.vehicle.pricePerDay; // Costo base del vehículo
+
+    // Suma el costo de todos los adicionales
+    if (reservation.adicionales && reservation.adicionales.length > 0) {
+        for (const item of reservation.adicionales) {
+            // Asegúrate de usar itemPrice que es el precio al momento de la asignación
+            recalculatedTotal += item.itemPrice * item.quantity;
+        }
+    }
+    return recalculatedTotal;
+};
+
+
 /**
  * @desc    Crear una nueva reserva en ESTADO PENDING (sin procesar pago)
  * @route   POST /api/reservations
@@ -575,7 +603,7 @@ const getReservationByNumber = asyncHandler(async (req, res) => {
  */
 const updateReservationStatus = asyncHandler(async (req, res) => {
   const reservationId = req.params.id;
-  const { status, adicionales: newAdicionalesData } = req.body; // <-- Recibe el array de adicionales
+  const { status } = req.body; // <-- Ya NO recibe 'adicionales' aquí
   const userId = req.user._id; // Para validación de usuario si es necesario
 
   const reservation = await Reservation.findById(reservationId).populate('vehicle'); // Popula el vehículo para acceder a su precio
@@ -594,60 +622,10 @@ const updateReservationStatus = asyncHandler(async (req, res) => {
 
 
   // Lógica para añadir adicionales y recalcular costo SOLO cuando el estado es 'picked_up'
-  if (status === 'picked_up') {
-    // Solo permitir añadir adicionales si la reserva está en 'confirmed' o 'pending'
-    if (reservation.status !== 'confirmed' && reservation.status !== 'pending') {
-      res.status(400);
-      throw new Error(`No se pueden añadir adicionales al recoger el vehículo si la reserva no está en estado 'confirmed' o 'pending'. Estado actual: ${reservation.status}`);
-    }
-
-    // Procesa los nuevos adicionales recibidos
-    if (newAdicionalesData && newAdicionalesData.length > 0) {
-      const validatedAdicionalesToAdd = [];
-      let costOfNewAdicionales = 0;
-
-      for (const item of newAdicionalesData) {
-        if (!item.adicionalId || item.quantity === undefined || item.quantity <= 0) {
-          res.status(400);
-          throw new Error('Datos de adicional inválidos: ID o cantidad faltante/inválida.');
-        }
-        const existingAdicional = await Adicional.findById(item.adicionalId);
-        if (!existingAdicional) { // Considera si quieres que esté activo también
-          res.status(404);
-          throw new Error(`Adicional con ID ${item.adicionalId} no encontrado.`);
-        }
-
-        validatedAdicionalesToAdd.push({
-          adicional: existingAdicional._id,
-          quantity: item.quantity,
-          itemPrice: existingAdicional.price, // Captura el precio actual del adicional
-        });
-        costOfNewAdicionales += existingAdicional.price * item.quantity;
-      }
-
-      // Añadir los nuevos adicionales validados al array existente de la reserva
-      // Usa `$push` si quieres añadir sin reemplazar, o concat si quieres reemplazar/fusionar.
-      // Aquí los añadimos, permitiendo que se acumulen si por alguna razón se llama varias veces.
-      reservation.adicionales.push(...validatedAdicionalesToAdd);
-
-      // Recalcular el costo total de la reserva
-      // Opción 1: Sumar el costo de los nuevos adicionales al costo actual
-      reservation.totalCost += costOfNewAdicionales;
-
-      // Opción 2 (Más robusta): Recalcular el total desde cero
-      // Esto es útil si el `totalCost` original podría tener descuentos o complejidades.
-      // Calcula días de duración
-      const diffTime = Math.abs(reservation.endDate.getTime() - reservation.startDate.getTime());
-      const durationInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      let recalculatedTotal = durationInDays * reservation.vehicle.pricePerDay; // Costo base del vehículo
-
-      // Suma todos los adicionales de la reserva (los que ya estaban y los nuevos)
-      reservation.adicionales.forEach(item => {
-        recalculatedTotal += item.itemPrice * item.quantity;
-      });
-      reservation.totalCost = recalculatedTotal;
-    }
-  }
+  // >>>>>>>>> ESTE BLOQUE HA SIDO ELIMINADO/MOVIDO A updateReservationAdicionales <<<<<<<<<<
+  // if (status === 'picked_up') {
+  //   // ... lógica de adicionales eliminada ...
+  // }
 
   // Validaciones de transición de estado (esto ya lo tienes)
   const allowedTransitions = {
@@ -672,13 +650,120 @@ const updateReservationStatus = asyncHandler(async (req, res) => {
     throw new Error("Vehículo asociado a la reserva no encontrado.");
   }
 
+  // Si el estado es 'picked_up', marcar vehículo como no disponible/reservado
+  if (status === 'picked_up') {
+    vehicle.isReserved = true; // El vehículo ya fue confirmado, ahora se retira físicamente
+    vehicle.isAvailable = false; // Ya no está disponible
+    // Si la reserva se pasó a picked_up, y el vehículo estaba en mantenimiento, lo sacamos de mantenimiento.
+    // Esto es un flujo potencial, depende de tu lógica de negocio.
+    // if (vehicle.needsMaintenance) {
+    //   vehicle.needsMaintenance = false;
+    //   vehicle.maintenanceReason = null;
+    //   vehicle.maintenanceStartDate = null;
+    // }
+  }
+
+  // Si el estado es 'returned', marcar vehículo como necesitando mantenimiento (y liberar de reservado)
+  if (status === 'returned') {
+    const { maintenanceReason } = req.body; // Aquí SÍ se espera el motivo de mantenimiento
+    if (!maintenanceReason || maintenanceReason.trim() === '') {
+      res.status(400);
+      throw new Error('El motivo de mantenimiento es obligatorio al marcar la reserva como devuelta.');
+    }
+    vehicle.needsMaintenance = true;
+    vehicle.maintenanceReason = maintenanceReason;
+    vehicle.maintenanceStartDate = new Date(); // Registra cuándo se marca para mantenimiento
+    vehicle.isReserved = false; // Ya no está reservado por esta reserva
+    vehicle.isAvailable = false; // No está disponible si necesita mantenimiento
+  }
+
+  // Si el estado es 'cancelled', liberar vehículo (si estaba reservado)
+  if (status === 'cancelled') {
+    if (vehicle.isReserved) {
+      vehicle.isReserved = false;
+      if (!vehicle.needsMaintenance) { // Solo si no necesita mantenimiento por otra razón
+        vehicle.isAvailable = true;
+      }
+    }
+  }
+
+
   // Guarda la reserva con el nuevo estado y los adicionales/costo actualizados
   await reservation.save();
+  await vehicle.save(); // Guarda también el vehículo si su estado cambió
 
   res.status(200).json({
     message: `Estado de la reserva actualizado a '${reservation.status}'.`,
     reservation, // Retorna la reserva actualizada
   });
+});
+
+
+/**
+ * @desc    Actualizar los adicionales de una reserva y recalcular su costo.
+ * @route   PUT /api/reservations/:id/adicionales
+ * @access  Private (Admin, Employee)
+ */
+const updateReservationAdicionales = asyncHandler(async (req, res) => {
+    const reservationId = req.params.id;
+    const { adicionales: newAdicionalesData } = req.body; // Array de { adicionalId, quantity }
+
+    // 1. Buscar la reserva y poblar el vehículo para su precio base
+    const reservation = await Reservation.findById(reservationId).populate('vehicle');
+
+    if (!reservation) {
+        res.status(404);
+        throw new Error("Reserva no encontrada.");
+    }
+
+    // 2. Validar que la reserva esté en un estado donde se puedan modificar adicionales
+    // Por ejemplo, 'confirmed' o 'picked_up'. No si está 'cancelled' o 'returned' ya.
+    const allowedStatuses = ['pending', 'confirmed', 'picked_up'];
+    if (!allowedStatuses.includes(reservation.status)) {
+        res.status(400);
+        throw new Error(`No se pueden modificar adicionales en el estado actual de la reserva: ${reservation.status}.`);
+    }
+
+    // 3. Procesar y validar los nuevos datos de adicionales
+    let validatedAdicionales = [];
+    if (newAdicionalesData && newAdicionalesData.length > 0) {
+        for (const item of newAdicionalesData) {
+            if (!item.adicionalId || item.quantity === undefined || item.quantity < 0) {
+                res.status(400);
+                throw new Error('Datos de adicional inválidos: ID o cantidad faltante/inválida. La cantidad no puede ser negativa.');
+            }
+            if (item.quantity === 0) {
+                // Si la cantidad es 0, simplemente lo omitimos de la lista final
+                continue;
+            }
+
+            const existingAdicional = await Adicional.findById(item.adicionalId);
+            if (!existingAdicional) {
+                res.status(404);
+                throw new Error(`Adicional con ID ${item.adicionalId} no encontrado.`);
+            }
+
+            validatedAdicionales.push({
+                adicional: existingAdicional._id,
+                quantity: item.quantity,
+                itemPrice: existingAdicional.price, // Captura el precio actual del adicional
+            });
+        }
+    }
+
+    // 4. Reemplazar el array de adicionales de la reserva
+    reservation.adicionales = validatedAdicionales;
+
+    // 5. Recalcular el costo total de la reserva (base del vehículo + nuevos adicionales)
+    reservation.totalCost = await recalculateReservationTotalCost(reservation);
+
+    // 6. Guardar la reserva con los adicionales y el costo actualizados
+    await reservation.save();
+
+    res.status(200).json({
+        message: 'Adicionales de la reserva actualizados y costo recalculado exitosamente.',
+        reservation, // Retorna la reserva actualizada
+    });
 });
 
 
@@ -688,6 +773,7 @@ module.exports = {
   getReservationById,
   payReservation,
   cancelReservation,
-  updateReservationStatus,
+  updateReservationStatus, // <-- Esta función ahora solo maneja cambios de estado
   getReservationByNumber,
+  updateReservationAdicionales, // <-- Exporta la nueva función
 };
