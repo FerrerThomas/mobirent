@@ -494,7 +494,17 @@ function AdminReportsPage() {
                       <tr key={reservation._id}>
                         <td>{reservation.reservationNumber}</td>
                         <td>{formatDate(reservation.startDate)}</td>
-                        <td>ARS {reservation.totalCost.toFixed(2)}</td>
+                        <td>
+                          {reservation.status === "cancelled" ? ( 
+                          <>
+                            ARS {reservation.totalCost !== null ? reservation.totalCost.toFixed(2) : "0.00"}
+                            <br /> {/* Salto de línea para "Rembolsado" */}
+                            Rembolsado: ARS {reservation.refundAmount !== null ? reservation.refundAmount.toFixed(2) : "0.00"}
+                          </>
+                          ) : ( 
+                            `ARS ${reservation.totalCost !== null ? reservation.totalCost.toFixed(2) : "0.00"}`)
+                        }
+                        </td>
                         <td>
                           <StatusIndicator status={reservation.status}>
                             {reservation.status}

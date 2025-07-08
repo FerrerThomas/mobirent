@@ -850,7 +850,8 @@ const getTotalRevenue = async (req, res) => {
 const getAllReservationsForReport = async (req, res) => {
   try {
     const reservations = await Reservation.find({})
-      .select("reservationNumber startDate totalCost status") // Selecciona solo los campos necesarios
+      // ***** CAMBIO CLAVE AQUÍ: Añadir 'refundAmount' a la selección *****
+      .select("reservationNumber startDate totalCost status refundAmount") // Asegúrate que 'refundAmount' es el nombre correcto del campo en tu modelo
       .sort({ createdAt: -1 }); // Opcional: ordenar por fecha de creación descendente
 
     res.status(200).json({
