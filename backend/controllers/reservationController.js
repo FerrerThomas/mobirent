@@ -766,6 +766,91 @@ const updateReservationAdicionales = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Obtener estadísticas de facturación detalladas
+// @route   GET /api/reservations/total-revenue
+// @access  Private/Employee/Admin
+const getTotalRevenue = async (req, res) => {
+  try {
+    const revenueStats = await Reservation.aggregate([
+      {
+        $match: {
+          // Aseguramos que el match use los nombres de estado correctos de la DB
+          status: { $in: ["confirmed", "picked_up", "returned", "cancelled"] }, 
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          totalAmount: { $sum: "$totalCost" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          status: "$_id",
+          totalAmount: 1,
+        },
+      },
+    ]);
+
+    let confirmedRevenue = 0;
+    let pickedUpRevenue = 0;
+    let returnedRevenue = 0;
+    let cancelledAmount = 0;
+
+    revenueStats.forEach((stat) => {
+      if (stat.status === "confirmed") { // CORREGIDO: "confirmed"
+        confirmedRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "picked_up") { // Correcto
+        pickedUpRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "returned") { // Correcto
+        returnedRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "cancelled") { // CORREGIDO: "cancelled"
+        cancelledAmount = stat.totalAmount || 0;
+      }
+    });
+
+    const totalRevenue = confirmedRevenue + pickedUpRevenue + returnedRevenue;
+
+    res.status(200).json({
+      success: true,
+      totalRevenue,
+      confirmedRevenue,
+      pickedUpRevenue,
+      returnedRevenue,
+      cancelledAmount,
+    });
+  } catch (error) {
+    console.error("Error al obtener la facturación total:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener la facturación total.",
+    });
+  }
+};
+
+// @desc    Obtener todas las reservas para reportes
+// @route   GET /api/reservations/report
+// @access  Private/Employee/Admin
+const getAllReservationsForReport = async (req, res) => {
+  try {
+    const reservations = await Reservation.find({})
+      .select("reservationNumber startDate totalCost status") // Selecciona solo los campos necesarios
+      .sort({ createdAt: -1 }); // Opcional: ordenar por fecha de creación descendente
+
+    res.status(200).json({
+      success: true,
+      count: reservations.length,
+      data: reservations,
+    });
+  } catch (error) {
+    console.error("Error al obtener las reservas para el reporte:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener las reservas para el reporte.",
+    });
+  }
+};
 
 module.exports = {
   createReservation,
@@ -776,4 +861,6 @@ module.exports = {
   updateReservationStatus, // <-- Esta función ahora solo maneja cambios de estado
   getReservationByNumber,
   updateReservationAdicionales, // <-- Exporta la nueva función
+  getTotalRevenue,
+  getAllReservationsForReport,
 };

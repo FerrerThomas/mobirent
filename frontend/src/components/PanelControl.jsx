@@ -156,9 +156,9 @@ return (
 
                             {userRole === "admin" && (
                                 <>
-                                    {/*<ActionButton to="/admin-reports" className="secondary">
+                                    <ActionButton to="/admin-reports" className="secondary">
                                         Ver Reportes Admin
-                                    </ActionButton>*/}
+                                    </ActionButton>
                                     <ActionButton to="/admin-users" className="secondary">
                                         Crear Usuarios
                                     </ActionButton>

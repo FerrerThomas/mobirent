@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "mongoose-sequence": "^6.0.1"
+    "mongoose-sequence": "^6.0.1",
+    "recharts": "^3.0.2"
   }
 }
