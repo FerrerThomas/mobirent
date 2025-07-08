@@ -457,9 +457,13 @@ function AdminReportsPage() {
                 <p>ARS {revenueStats.returnedRevenue !== null ? revenueStats.returnedRevenue.toFixed(2) : "0.00"}</p>
               </DetailedStatCard>
               <DetailedStatCard className="cancelled">
-                <h3>Total Reservas Canceladas</h3>
-                <p>ARS {revenueStats.cancelledAmount !== null ? revenueStats.cancelledAmount.toFixed(2) : "0.00"}</p>
-              </DetailedStatCard>
+              <h3>Reservas Canceladas</h3>
+              <p>
+                Total: ARS {revenueStats.cancelledAmount !== null ? revenueStats.cancelledAmount.toFixed(2) : "0.00"}
+                <br /> {/* Salto de línea para la siguiente información */}
+                Rembolsado: ARS {revenueStats.cancelledRefundAmount !== null ? revenueStats.cancelledRefundAmount.toFixed(2) : "0.00"}
+              </p>
+            </DetailedStatCard>
             </DetailedStatsContainer>
           </>
         )}

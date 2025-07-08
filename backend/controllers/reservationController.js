@@ -774,14 +774,25 @@ const getTotalRevenue = async (req, res) => {
     const revenueStats = await Reservation.aggregate([
       {
         $match: {
-          // Aseguramos que el match use los nombres de estado correctos de la DB
-          status: { $in: ["confirmed", "picked_up", "returned", "cancelled"] }, 
+          status: { $in: ["confirmed", "picked_up", "returned", "cancelled"] },
         },
       },
       {
         $group: {
           _id: "$status",
           totalAmount: { $sum: "$totalCost" },
+          // AÑADE ESTO: Suma el refundAmount solo para las reservas canceladas
+          // Asume que el campo se llama 'refundAmount' en tu modelo de Reservation
+          // Y que solo tiene valor para las canceladas, o es 0/null para otras
+          refundedAmountSum: {
+            $sum: {
+              $cond: {
+                if: { $eq: ["$status", "cancelled"] },
+                then: "$refundAmount", // Asegúrate que este es el nombre correcto del campo
+                else: 0,
+              },
+            },
+          },
         },
       },
       {
@@ -789,6 +800,7 @@ const getTotalRevenue = async (req, res) => {
           _id: 0,
           status: "$_id",
           totalAmount: 1,
+          refundedAmountSum: 1, // Asegúrate de incluirlo en la proyección
         },
       },
     ]);
@@ -797,16 +809,18 @@ const getTotalRevenue = async (req, res) => {
     let pickedUpRevenue = 0;
     let returnedRevenue = 0;
     let cancelledAmount = 0;
+    let cancelledRefundAmount = 0; // Nueva variable para el monto rembolsado
 
     revenueStats.forEach((stat) => {
-      if (stat.status === "confirmed") { // CORREGIDO: "confirmed"
+      if (stat.status === "confirmed") {
         confirmedRevenue = stat.totalAmount || 0;
-      } else if (stat.status === "picked_up") { // Correcto
+      } else if (stat.status === "picked_up") {
         pickedUpRevenue = stat.totalAmount || 0;
-      } else if (stat.status === "returned") { // Correcto
+      } else if (stat.status === "returned") {
         returnedRevenue = stat.totalAmount || 0;
-      } else if (stat.status === "cancelled") { // CORREGIDO: "cancelled"
+      } else if (stat.status === "cancelled") {
         cancelledAmount = stat.totalAmount || 0;
+        cancelledRefundAmount = stat.refundedAmountSum || 0; // Asigna el valor sumado aquí
       }
     });
 
@@ -819,6 +833,7 @@ const getTotalRevenue = async (req, res) => {
       pickedUpRevenue,
       returnedRevenue,
       cancelledAmount,
+      cancelledRefundAmount, // AÑADE ESTO: Devuelve el monto rembolsado
     });
   } catch (error) {
     console.error("Error al obtener la facturación total:", error);
