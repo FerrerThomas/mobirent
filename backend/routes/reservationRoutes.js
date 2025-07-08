@@ -10,14 +10,17 @@ const {
   cancelReservation,
   getReservationByNumber,
   updateReservationStatus,
-  updateReservationAdicionales, // <-- Asegúrate de que esta esté importada
+  updateReservationAdicionales,
+  getTotalRevenue,
+  getAllReservationsForReport, 
 } = require("../controllers/reservationController");
 
 const {
   processReservationPayment,
 } = require("../controllers/paymentController");
 const { protect, authorize } = require("../middleware/authMiddleware");
-
+router.get("/total-revenue", protect, getTotalRevenue);
+router.get("/report", protect, getAllReservationsForReport);
 // Nueva ruta para crear una reserva
 router.route("/").post(protect, createReservation);
 
@@ -40,5 +43,4 @@ router.route("/byNumber/:reservationNumber").get(protect, getReservationByNumber
 
 router.route("/:id/status").put(protect, updateReservationStatus);
 router.route("/:id/adicionales").put(protect, updateReservationAdicionales);
-
 module.exports = router;

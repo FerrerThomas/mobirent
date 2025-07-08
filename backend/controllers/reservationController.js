@@ -766,6 +766,107 @@ const updateReservationAdicionales = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Obtener estadísticas de facturación detalladas
+// @route   GET /api/reservations/total-revenue
+// @access  Private/Employee/Admin
+const getTotalRevenue = async (req, res) => {
+  try {
+    const revenueStats = await Reservation.aggregate([
+      {
+        $match: {
+          status: { $in: ["confirmed", "picked_up", "returned", "cancelled"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          totalAmount: { $sum: "$totalCost" },
+          // AÑADE ESTO: Suma el refundAmount solo para las reservas canceladas
+          // Asume que el campo se llama 'refundAmount' en tu modelo de Reservation
+          // Y que solo tiene valor para las canceladas, o es 0/null para otras
+          refundedAmountSum: {
+            $sum: {
+              $cond: {
+                if: { $eq: ["$status", "cancelled"] },
+                then: "$refundAmount", // Asegúrate que este es el nombre correcto del campo
+                else: 0,
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          status: "$_id",
+          totalAmount: 1,
+          refundedAmountSum: 1, // Asegúrate de incluirlo en la proyección
+        },
+      },
+    ]);
+
+    let confirmedRevenue = 0;
+    let pickedUpRevenue = 0;
+    let returnedRevenue = 0;
+    let cancelledAmount = 0;
+    let cancelledRefundAmount = 0; // Nueva variable para el monto rembolsado
+
+    revenueStats.forEach((stat) => {
+      if (stat.status === "confirmed") {
+        confirmedRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "picked_up") {
+        pickedUpRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "returned") {
+        returnedRevenue = stat.totalAmount || 0;
+      } else if (stat.status === "cancelled") {
+        cancelledAmount = stat.totalAmount || 0;
+        cancelledRefundAmount = stat.refundedAmountSum || 0; // Asigna el valor sumado aquí
+      }
+    });
+
+    const totalRevenue = confirmedRevenue + pickedUpRevenue + returnedRevenue;
+
+    res.status(200).json({
+      success: true,
+      totalRevenue,
+      confirmedRevenue,
+      pickedUpRevenue,
+      returnedRevenue,
+      cancelledAmount,
+      cancelledRefundAmount, // AÑADE ESTO: Devuelve el monto rembolsado
+    });
+  } catch (error) {
+    console.error("Error al obtener la facturación total:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener la facturación total.",
+    });
+  }
+};
+
+// @desc    Obtener todas las reservas para reportes
+// @route   GET /api/reservations/report
+// @access  Private/Employee/Admin
+const getAllReservationsForReport = async (req, res) => {
+  try {
+    const reservations = await Reservation.find({})
+      // ***** CAMBIO CLAVE AQUÍ: Añadir 'refundAmount' a la selección *****
+      .select("reservationNumber startDate totalCost status refundAmount") // Asegúrate que 'refundAmount' es el nombre correcto del campo en tu modelo
+      .sort({ createdAt: -1 }); // Opcional: ordenar por fecha de creación descendente
+
+    res.status(200).json({
+      success: true,
+      count: reservations.length,
+      data: reservations,
+    });
+  } catch (error) {
+    console.error("Error al obtener las reservas para el reporte:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener las reservas para el reporte.",
+    });
+  }
+};
 
 module.exports = {
   createReservation,
@@ -776,4 +877,6 @@ module.exports = {
   updateReservationStatus, // <-- Esta función ahora solo maneja cambios de estado
   getReservationByNumber,
   updateReservationAdicionales, // <-- Exporta la nueva función
+  getTotalRevenue,
+  getAllReservationsForReport,
 };
