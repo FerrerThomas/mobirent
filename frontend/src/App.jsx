@@ -32,6 +32,7 @@ import EmployeeManagementPage from './components/EmployeeManagementPage.jsx';
 import PanelControl from './components/PanelControl.jsx';
 import ReservationStatusPage from "./components/ReservationStatusPage.jsx";
 import AdicionalManagementPage from "./components/AdicionalManagementPage.jsx";
+import ReservationDetailPageEmp from "./components/ReservationDetailPageEmp.jsx";
 
 // Componente de Ruta Protegida 29/5 micha
 // **ESTA ES LA ÚNICA Y CORRECTA DECLARACIÓN DE ProtectedRoute**
@@ -226,6 +227,14 @@ function App() {
             element={
               <AppProtectedRoute allowedRoles={["admin"]}>
                 <AdicionalManagementPage />
+              </AppProtectedRoute>
+            }
+          />
+          <Route
+            path="/reservation-detail-emp/:id" // Puedes ajustar esta ruta si lo deseas
+            element={
+              <AppProtectedRoute allowedRoles={["employee"]}>
+                <ReservationDetailPageEmp />
               </AppProtectedRoute>
             }
           />

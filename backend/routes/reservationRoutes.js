@@ -9,7 +9,8 @@ const {
   getReservationById,
   cancelReservation,
   getReservationByNumber,
-  updateReservationStatus, // <-- Asegúrate de que esta esté importada
+  updateReservationStatus,
+  updateReservationAdicionales, // <-- Asegúrate de que esta esté importada
 } = require("../controllers/reservationController");
 
 const {
@@ -38,5 +39,6 @@ router.route("/:id/cancel").put(protect, cancelReservation); // <-- AÑADE ESTA 
 router.route("/byNumber/:reservationNumber").get(protect, getReservationByNumber);
 
 router.route("/:id/status").put(protect, updateReservationStatus);
+router.route("/:id/adicionales").put(protect, updateReservationAdicionales);
 
 module.exports = router;
