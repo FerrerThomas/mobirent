@@ -586,11 +586,11 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
 
       if (statusToChangeTo === "returned") {
         if (!maintenanceReason || maintenanceReason.trim() === "") {
-          setStatusChangeError("El motivo de mantenimiento es obligatorio al marcar como devuelto.");
+          setStatusChangeError("El motivo de mantenimiento es obligatorio al marcar como devueltoo.");
           setStatusChangeLoading(false);
           return;
         }
-
+        updateReservationBody.maintenanceReason = maintenanceReason;
         if (reservation.vehicle && reservation.vehicle._id) {
           try {
             await axiosInstance.put(
@@ -937,9 +937,6 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
               </AdicionalesSection>
             )}
 
-            {statusChangeError && (
-              <p style={{ color: "red" }}>{statusChangeError}</p>
-            )}
             <ModalActions>
               <Button
                 className="secondary"
