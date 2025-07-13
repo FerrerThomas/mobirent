@@ -1,14 +1,12 @@
-// backend/controllers/reservationController.js
-
 const asyncHandler = require("express-async-handler");
 const Reservation = require("../models/Reservation");
 const Vehicle = require("../models/Vehicle");
 const Branch = require("../models/Branch");
 const Adicional = require("../models/Adicional");
-const User = require("../models/User"); // Asegúrate de que User está importado para el email
+const User = require("../models/User");
 const sendEmail = require("../utils/sendEmail");
 const fakePaymentService = require("../services/fakePaymentService");
-const { calculateRefund } = require("../services/refundService"); // Importar el servicio de reembolso
+const { calculateRefund } = require("../services/refundService");
 
 // Helper para calcular el costo total (mantener si se usa en createReservation)
 const calculateTotalCost = (startDate, endDate, vehiclePricePerDay) => {
@@ -18,39 +16,39 @@ const calculateTotalCost = (startDate, endDate, vehiclePricePerDay) => {
 };
 
 // Helper para recalcular el costo total de la reserva incluyendo adicionales
+// NOTA: Esta función ya no se usará para actualizar el totalCost en pickupReservation,
+// pero se mantiene por si se usa en otras partes del código (ej. updateReservationAdicionales).
 const recalculateReservationTotalCost = async (reservation) => {
-    // Si la reserva no tiene vehicle o no tiene pricePerDay, manejar el error o devolver el costo actual
-    if (!reservation.vehicle || !reservation.vehicle.pricePerDay) {
-        console.warn('Advertencia: Vehículo o pricePerDay no disponibles para recalcular el costo base.');
-        // Considera si quieres lanzar un error o mantener el costo actual en este caso
-        return reservation.totalCost; // Devuelve el costo actual si no se puede recalcular base
+  // Si la reserva no tiene vehicle o no tiene pricePerDay, manejar el error o devolver el costo actual
+  if (!reservation.vehicle || !reservation.vehicle.pricePerDay) {
+    console.warn(
+      "Advertencia: Vehículo o pricePerDay no disponibles para recalcular el costo base."
+    );
+    return reservation.totalCost; // Devuelve el costo actual si no se puede recalcular base
+  }
+
+  const startDate = new Date(reservation.startDate);
+  const endDate = new Date(reservation.endDate);
+
+  const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+  const durationInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let recalculatedTotal = durationInDays * reservation.vehicle.pricePerDay; // Costo base del vehículo
+
+  // Suma el costo de todos los adicionales
+  if (reservation.adicionales && reservation.adicionales.length > 0) {
+    for (const item of reservation.adicionales) {
+      // Asegúrate de usar itemPrice que es el precio al momento de la asignación
+      recalculatedTotal += item.itemPrice * item.quantity;
     }
-
-    const startDate = new Date(reservation.startDate);
-    const endDate = new Date(reservation.endDate);
-
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const durationInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    let recalculatedTotal = durationInDays * reservation.vehicle.pricePerDay; // Costo base del vehículo
-
-    // Suma el costo de todos los adicionales
-    if (reservation.adicionales && reservation.adicionales.length > 0) {
-        for (const item of reservation.adicionales) {
-            // Asegúrate de usar itemPrice que es el precio al momento de la asignación
-            recalculatedTotal += item.itemPrice * item.quantity;
-        }
-    }
-    return recalculatedTotal;
+  }
+  return recalculatedTotal;
 };
-
 
 /**
  * @desc    Crear una nueva reserva en ESTADO PENDING (sin procesar pago)
  * @route   POST /api/reservations
  * @access Private (User)
- * NOTA: Esta función podría ser modificada en el futuro si se decide que las reservas
- * solo existen si están confirmadas, como se discutió anteriormente.
  */
 const createReservation = asyncHandler(async (req, res) => {
   const { vehicleId, pickupBranchId, returnBranchId, startDate, endDate } =
@@ -121,16 +119,15 @@ const createReservation = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("Vehículo en mantenimiento. Elige otro.");
   }
-  // Si isAvailable o isReserved son flags en el modelo
-  if (!vehicle.isAvailable || vehicle.isReserved) {
+  if (!vehicle.isAvailable) {
     res.status(400);
-    throw new Error("Vehículo no disponible o ya reservado.");
+    throw new Error("Vehículo no disponible.");
   }
 
   // 4) Revisar reservas superpuestas
   const overlappingReservations = await Reservation.find({
     vehicle: vehicleId,
-    status: { $in: ["pending", "confirmed", "picked_up"] }, // Aquí se siguen considerando 'pending'
+    status: { $in: ["pending", "confirmed", "picked_up"] },
     $or: [
       { startDate: { $lt: parsedEndDate, $gte: parsedStartDate } },
       { endDate: { $gt: parsedStartDate, $lte: parsedEndDate } },
@@ -173,7 +170,7 @@ const createReservation = asyncHandler(async (req, res) => {
       method: null,
       status: null,
     },
-    reservationNumber: null, // el hook pre('save') lo genera automáticamente
+    reservationNumber: null,
   });
 
   res.status(201).json({
@@ -206,10 +203,13 @@ const getMyReservations = asyncHandler(async (req, res) => {
 const getReservationById = asyncHandler(async (req, res) => {
   const reservation = await Reservation.findById(req.params.id)
     .populate("user", "username email")
-    .populate("vehicle", "brand model licensePlate pricePerDay photoUrl needsMaintenance isAvailable isReserved")
+    .populate(
+      "vehicle",
+      "brand model licensePlate pricePerDay photoUrl needsMaintenance isAvailable"
+    )
     .populate("pickupBranch", "name address")
     .populate("returnBranch", "name address")
-    .populate("adicionales.adicional", "name price description"); // <-- AÑADE ESTA LÍNEA PARA POPULAR ADICIONALES
+    .populate("adicionales.adicional", "name price description");
 
   if (!reservation) {
     res.status(404);
@@ -278,12 +278,10 @@ const payReservation = asyncHandler(async (req, res) => {
   const now = new Date();
   const createdAt = new Date(reservation.createdAt);
   if (now - createdAt > 30 * 60 * 1000) {
-    // si pasaron más de 30 minutos, cancelar la reserva y liberar vehículo
     reservation.status = "cancelled";
-    // CAMBIO: Asegúrate de que paymentInfo.status también refleje el rechazo por tiempo
     reservation.paymentInfo.status = "rejected";
     await reservation.save();
-    res.status(400); // Re-setear status para el throw
+    res.status(400);
     throw new Error(
       "Se venció el plazo de pago (30 min). La reserva ha sido cancelada."
     );
@@ -294,7 +292,6 @@ const payReservation = asyncHandler(async (req, res) => {
   const resultado = await fakePaymentService.processPayment(paymentData, monto);
 
   if (resultado.status === "rejected") {
-    // 6b) Pago rechazado: la reserva sigue “pending” y guardamos el intento
     reservation.paymentInfo = {
       transactionId: resultado.transactionId,
       method: paymentData.method,
@@ -309,7 +306,6 @@ const payReservation = asyncHandler(async (req, res) => {
   }
 
   if (resultado.status === "pending") {
-    // 6c) Pago en proceso (estado intermedio)
     reservation.paymentInfo = {
       transactionId: resultado.transactionId,
       method: paymentData.method,
@@ -331,17 +327,12 @@ const payReservation = asyncHandler(async (req, res) => {
     method: paymentData.method,
     status: "approved",
   };
-  reservation.voucherSent = true; // ¡Asegúrate de marcar esto!
+  reservation.voucherSent = true;
   await reservation.save();
 
-  // 7) Marcar vehículo como reservado
+  // 7) Marcar vehículo como no disponible
   const vehiculo = await Vehicle.findById(reservation.vehicle._id);
   if (vehiculo) {
-    vehiculo.isReserved = true;
-    // Si el vehículo estaba en mantenimiento y sale de allí al ser reservado (no es el flujo normal, pero por si acaso)
-    // vehiculo.needsMaintenance = false;
-    // vehiculo.maintenanceReason = null;
-    // vehiculo.maintenanceStartDate = null;
     vehiculo.isAvailable = false; // Un vehículo reservado no está disponible para otros
     await vehiculo.save();
     console.log("[PAY] Después de save(), estado en BD:", reservation.status);
@@ -351,7 +342,7 @@ const payReservation = asyncHandler(async (req, res) => {
   try {
     const userEmail = reservation.user.email;
     const userName =
-      reservation.user.username || reservation.user.email.split("@")[0]; // Usa el username o la parte antes del @
+      reservation.user.username || reservation.user.email.split("@")[0];
     const vehicleDetails = reservation.vehicle
       ? `${reservation.vehicle.brand} ${reservation.vehicle.model} (${reservation.vehicle.licensePlate})`
       : "N/A";
@@ -362,7 +353,6 @@ const payReservation = asyncHandler(async (req, res) => {
       ? `${reservation.returnBranch.name} (${reservation.returnBranch.address})`
       : "N/A";
 
-    // Formateo de fechas para el email
     const startDateFormatted = new Date(
       reservation.startDate
     ).toLocaleDateString("es-AR", {
@@ -437,8 +427,8 @@ const cancelReservation = asyncHandler(async (req, res) => {
 
   // 1) Buscar la reserva y poblarla con vehicle y user
   const reservation = await Reservation.findById(reservationId)
-    .populate("vehicle") // Necesitamos detalles del vehículo para liberarlo si es necesario
-    .populate("user", "username email"); // Necesitamos el email del usuario para el correo
+    .populate("vehicle")
+    .populate("user", "username email");
 
   if (!reservation) {
     res.status(404);
@@ -452,7 +442,6 @@ const cancelReservation = asyncHandler(async (req, res) => {
   }
 
   // 3) Verificar estado permitido (solo "confirmed")
-  // Consideramos que 'picked_up' o 'returned' no se pueden cancelar con reembolso.
   if (reservation.status !== "confirmed") {
     res.status(400);
     throw new Error(
@@ -468,21 +457,15 @@ const cancelReservation = asyncHandler(async (req, res) => {
 
   // 5) Actualizar campos de cancelación
   reservation.status = "cancelled";
-  reservation.canceledAt = new Date(); // Asigna la fecha y hora actual de la cancelación
+  reservation.canceledAt = new Date();
   reservation.refundAmount = refundAmount;
   await reservation.save();
 
   // 6) Liberar disponibilidad del vehículo
-  // Solo si el vehículo estaba marcado como reservado (lo cual ocurre al CONFIRMAR la reserva)
   const vehicle = await Vehicle.findById(reservation.vehicle._id);
-  if (vehicle && vehicle.isReserved) {
-    // Si el vehículo fue populado y estaba marcado como reservado
-    vehicle.isReserved = false;
-    // Opcional: Si el vehículo se marcó como no disponible al reservar, volver a disponible.
-    // Asume que al liberar la reserva, el vehículo vuelve a ser "disponible" a menos que esté en mantenimiento.
+  if (vehicle) {
     if (!vehicle.needsMaintenance) {
-      // Solo si no está en mantenimiento
-      vehicle.isAvailable = true;
+      vehicle.isAvailable = true; // Vuelve a estar disponible si no necesita mantenimiento
     }
     await vehicle.save();
   }
@@ -557,9 +540,9 @@ const cancelReservation = asyncHandler(async (req, res) => {
 
   try {
     await sendEmail(
-      reservation.user.email, // Destinatario
-      `Confirmación de Cancelación - Reserva #${reservation.reservationNumber}`, // Asunto
-      correoHtml // Contenido HTML
+      reservation.user.email,
+      `Confirmación de Cancelación - Reserva #${reservation.reservationNumber}`,
+      correoHtml
     );
     console.log(
       `Email de cancelación con reembolso enviado a ${reservation.user.email} para reserva ${reservation.reservationNumber}`
@@ -568,11 +551,10 @@ const cancelReservation = asyncHandler(async (req, res) => {
     console.error("Error al enviar email de cancelación:", mailErr);
   }
 
-  // 8) Respuesta al frontend
   res.status(200).json({
     message: "Reserva cancelada con éxito.",
-    refundAmount: refundAmount, // <-- INCLUIR EN LA RESPUESTA
-    refundType: refundType, // <-- INCLUIR EN LA RESPUESTA
+    refundAmount: refundAmount,
+    refundType: refundType,
     reservationId: reservation._id,
     status: "cancelled",
   });
@@ -583,10 +565,13 @@ const getReservationByNumber = asyncHandler(async (req, res) => {
   const reservationNumber = req.params.reservationNumber;
   const reservation = await Reservation.findOne({ reservationNumber })
     .populate("user", "username email")
-    .populate("vehicle", "brand model licensePlate pricePerDay photoUrl needsMaintenance isAvailable isReserved")
+    .populate(
+      "vehicle",
+      "brand model licensePlate pricePerDay photoUrl needsMaintenance isAvailable"
+    )
     .populate("pickupBranch", "name address")
     .populate("returnBranch", "name address")
-    .populate("adicionales.adicional", "name price description"); // <-- AÑADE ESTA LÍNEA
+    .populate("adicionales.adicional", "name price description");
 
   if (!reservation) {
     res.status(404);
@@ -595,7 +580,6 @@ const getReservationByNumber = asyncHandler(async (req, res) => {
   res.status(200).json(reservation);
 });
 
-
 /**
  * @desc    Actualizar el estado de una reserva (y añadir adicionales si se pasa a 'picked_up')
  * @route   PUT /api/reservations/:id/status
@@ -603,101 +587,74 @@ const getReservationByNumber = asyncHandler(async (req, res) => {
  */
 const updateReservationStatus = asyncHandler(async (req, res) => {
   const reservationId = req.params.id;
-  const { status } = req.body; // <-- Ya NO recibe 'adicionales' aquí
-  const userId = req.user._id; // Para validación de usuario si es necesario
+  const { status } = req.body;
+  const userId = req.user._id;
 
-  const reservation = await Reservation.findById(reservationId).populate('vehicle'); // Popula el vehículo para acceder a su precio
+  const reservation = await Reservation.findById(reservationId).populate(
+    "vehicle"
+  );
 
   if (!reservation) {
     res.status(404);
     throw new Error("Reserva no encontrada.");
   }
 
-  // Opcional: Validaciones de rol (ej. solo admin/empleado puede cambiar estados clave)
-  // Asegúrate de que tu ruta (`reservationRoutes.js`) tenga el middleware `protect` y `authorize(['admin', 'employee'])`
-  // if (req.user.role !== 'admin' && req.user.role !== 'employee') {
-  //   res.status(403);
-  //   throw new Error("No autorizado para gestionar el estado de las reservas.");
-  // }
-
-
-  // Lógica para añadir adicionales y recalcular costo SOLO cuando el estado es 'picked_up'
-  // >>>>>>>>> ESTE BLOQUE HA SIDO ELIMINADO/MOVIDO A updateReservationAdicionales <<<<<<<<<<
-  // if (status === 'picked_up') {
-  //   // ... lógica de adicionales eliminada ...
-  // }
-
-  // Validaciones de transición de estado (esto ya lo tienes)
   const allowedTransitions = {
-    'pending': ['confirmed', 'cancelled'], // Asume que 'pending' a 'picked_up' no es directo
-    'confirmed': ['picked_up', 'cancelled'],
-    'picked_up': ['returned'],
-    'returned': ['completed'],
+    pending: ["confirmed", "cancelled"],
+    confirmed: ["picked_up", "cancelled"],
+    picked_up: ["returned"],
+    returned: ["completed"],
   };
 
-  if (!allowedTransitions[reservation.status] || !allowedTransitions[reservation.status].includes(status)) {
+  if (
+    !allowedTransitions[reservation.status] ||
+    !allowedTransitions[reservation.status].includes(status)
+  ) {
     res.status(400);
-    throw new Error(`Transición de estado inválida de '${reservation.status}' a '${status}'.`);
+    throw new Error(
+      `Transición de estado inválida de '${reservation.status}' a '${status}'.`
+    );
   }
 
-  // Actualiza el estado de la reserva
   reservation.status = status;
 
-  // Lógica específica para el vehículo según el nuevo estado (ajustado de conversaciones previas)
   const vehicle = await Vehicle.findById(reservation.vehicle._id);
   if (!vehicle) {
     res.status(404);
     throw new Error("Vehículo asociado a la reserva no encontrado.");
   }
 
-  // Si el estado es 'picked_up', marcar vehículo como no disponible/reservado
-  if (status === 'picked_up') {
-    vehicle.isReserved = true; // El vehículo ya fue confirmado, ahora se retira físicamente
-    vehicle.isAvailable = false; // Ya no está disponible
-    // Si la reserva se pasó a picked_up, y el vehículo estaba en mantenimiento, lo sacamos de mantenimiento.
-    // Esto es un flujo potencial, depende de tu lógica de negocio.
-    // if (vehicle.needsMaintenance) {
-    //   vehicle.needsMaintenance = false;
-    //   vehicle.maintenanceReason = null;
-    //   vehicle.maintenanceStartDate = null;
-    // }
-  }
-
-  // Si el estado es 'returned', marcar vehículo como necesitando mantenimiento (y liberar de reservado)
-  if (status === 'returned') {
-    const { maintenanceReason } = req.body; // Aquí SÍ se espera el motivo de mantenimiento
-    if (!maintenanceReason || maintenanceReason.trim() === '') {
+  // Lógica específica para el vehículo según el nuevo estado
+  if (status === "returned") {
+    const { maintenanceReason } = req.body;
+    if (!maintenanceReason || maintenanceReason.trim() === "") {
       res.status(400);
-      throw new Error('El motivo de mantenimiento es obligatorio al marcar la reserva como devuelta.');
+      throw new Error(
+        "El motivo de mantenimiento es obligatorio al marcar la reserva como devuelta."
+      );
     }
     vehicle.needsMaintenance = true;
     vehicle.maintenanceReason = maintenanceReason;
-    vehicle.maintenanceStartDate = new Date(); // Registra cuándo se marca para mantenimiento
-    vehicle.isReserved = false; // Ya no está reservado por esta reserva
+    vehicle.maintenanceStartDate = new Date();
     vehicle.isAvailable = false; // No está disponible si necesita mantenimiento
   }
 
-  // Si el estado es 'cancelled', liberar vehículo (si estaba reservado)
-  if (status === 'cancelled') {
-    if (vehicle.isReserved) {
-      vehicle.isReserved = false;
-      if (!vehicle.needsMaintenance) { // Solo si no necesita mantenimiento por otra razón
-        vehicle.isAvailable = true;
-      }
+  // Si el estado es 'cancelled', liberar vehículo (si estaba no disponible por esta reserva)
+  if (status === "cancelled") {
+    if (!vehicle.needsMaintenance) {
+      // Solo si no necesita mantenimiento por otra razón
+      vehicle.isAvailable = true;
     }
   }
 
-
-  // Guarda la reserva con el nuevo estado y los adicionales/costo actualizados
   await reservation.save();
-  await vehicle.save(); // Guarda también el vehículo si su estado cambió
+  await vehicle.save();
 
   res.status(200).json({
     message: `Estado de la reserva actualizado a '${reservation.status}'.`,
-    reservation, // Retorna la reserva actualizada
+    reservation,
   });
 });
-
 
 /**
  * @desc    Actualizar los adicionales de una reserva y recalcular su costo.
@@ -705,65 +662,76 @@ const updateReservationStatus = asyncHandler(async (req, res) => {
  * @access  Private (Admin, Employee)
  */
 const updateReservationAdicionales = asyncHandler(async (req, res) => {
-    const reservationId = req.params.id;
-    const { adicionales: newAdicionalesData } = req.body; // Array de { adicionalId, quantity }
+  const reservationId = req.params.id;
+  const { adicionales: newAdicionalesData } = req.body; // Array de { adicionalId, quantity }
 
-    // 1. Buscar la reserva y poblar el vehículo para su precio base
-    const reservation = await Reservation.findById(reservationId).populate('vehicle');
+  // 1. Buscar la reserva y poblar el vehículo para su precio base
+  const reservation = await Reservation.findById(reservationId).populate(
+    "vehicle"
+  );
 
-    if (!reservation) {
-        res.status(404);
-        throw new Error("Reserva no encontrada.");
-    }
+  if (!reservation) {
+    res.status(404);
+    throw new Error("Reserva no encontrada.");
+  }
 
-    // 2. Validar que la reserva esté en un estado donde se puedan modificar adicionales
-    // Por ejemplo, 'confirmed' o 'picked_up'. No si está 'cancelled' o 'returned' ya.
-    const allowedStatuses = ['pending', 'confirmed', 'picked_up'];
-    if (!allowedStatuses.includes(reservation.status)) {
+  // 2. Validar que la reserva esté en un estado donde se puedan modificar adicionales
+  const allowedStatuses = ["pending", "confirmed", "picked_up"];
+  if (!allowedStatuses.includes(reservation.status)) {
+    res.status(400);
+    throw new Error(
+      `No se pueden modificar adicionales en el estado actual de la reserva: ${reservation.status}.`
+    );
+  }
+
+  // 3. Procesar y validar los nuevos datos de adicionales
+  let validatedAdicionales = [];
+  if (newAdicionalesData && newAdicionalesData.length > 0) {
+    for (const item of newAdicionalesData) {
+      if (
+        !item.adicionalId ||
+        item.quantity === undefined ||
+        item.quantity < 0
+      ) {
         res.status(400);
-        throw new Error(`No se pueden modificar adicionales en el estado actual de la reserva: ${reservation.status}.`);
+        throw new Error(
+          "Datos de adicional inválidos: ID o cantidad faltante/inválida. La cantidad no puede ser negativa."
+        );
+      }
+      if (item.quantity === 0) {
+        continue;
+      }
+
+      const existingAdicional = await Adicional.findById(item.adicionalId);
+      if (!existingAdicional) {
+        res.status(404);
+        throw new Error(`Adicional con ID ${item.adicionalId} no encontrado.`);
+      }
+
+      validatedAdicionales.push({
+        adicional: existingAdicional._id,
+        quantity: item.quantity,
+        itemPrice: existingAdicional.price, // Captura el precio actual del adicional
+      });
     }
+  }
 
-    // 3. Procesar y validar los nuevos datos de adicionales
-    let validatedAdicionales = [];
-    if (newAdicionalesData && newAdicionalesData.length > 0) {
-        for (const item of newAdicionalesData) {
-            if (!item.adicionalId || item.quantity === undefined || item.quantity < 0) {
-                res.status(400);
-                throw new Error('Datos de adicional inválidos: ID o cantidad faltante/inválida. La cantidad no puede ser negativa.');
-            }
-            if (item.quantity === 0) {
-                // Si la cantidad es 0, simplemente lo omitimos de la lista final
-                continue;
-            }
+  // 4. Reemplazar el array de adicionales de la reserva
+  reservation.adicionales = validatedAdicionales;
 
-            const existingAdicional = await Adicional.findById(item.adicionalId);
-            if (!existingAdicional) {
-                res.status(404);
-                throw new Error(`Adicional con ID ${item.adicionalId} no encontrado.`);
-            }
+  // 5. Recalcular el costo total de la reserva (base del vehículo + nuevos adicionales)
+  // ESTA ES LA ÚNICA FUNCIÓN DONDE EL COSTO TOTAL SE RECALCULA EN EL BACKEND
+  // PARA REFLEJAR CAMBIOS EN LOS ADICIONALES.
+  reservation.totalCost = await recalculateReservationTotalCost(reservation);
 
-            validatedAdicionales.push({
-                adicional: existingAdicional._id,
-                quantity: item.quantity,
-                itemPrice: existingAdicional.price, // Captura el precio actual del adicional
-            });
-        }
-    }
+  // 6. Guardar la reserva con los adicionales y el costo actualizados
+  await reservation.save();
 
-    // 4. Reemplazar el array de adicionales de la reserva
-    reservation.adicionales = validatedAdicionales;
-
-    // 5. Recalcular el costo total de la reserva (base del vehículo + nuevos adicionales)
-    reservation.totalCost = await recalculateReservationTotalCost(reservation);
-
-    // 6. Guardar la reserva con los adicionales y el costo actualizados
-    await reservation.save();
-
-    res.status(200).json({
-        message: 'Adicionales de la reserva actualizados y costo recalculado exitosamente.',
-        reservation, // Retorna la reserva actualizada
-    });
+  res.status(200).json({
+    message:
+      "Adicionales de la reserva actualizados y costo recalculado exitosamente.",
+    reservation,
+  });
 });
 
 // @desc    Obtener estadísticas de facturación detalladas
@@ -781,14 +749,11 @@ const getTotalRevenue = async (req, res) => {
         $group: {
           _id: "$status",
           totalAmount: { $sum: "$totalCost" },
-          // AÑADE ESTO: Suma el refundAmount solo para las reservas canceladas
-          // Asume que el campo se llama 'refundAmount' en tu modelo de Reservation
-          // Y que solo tiene valor para las canceladas, o es 0/null para otras
           refundedAmountSum: {
             $sum: {
               $cond: {
                 if: { $eq: ["$status", "cancelled"] },
-                then: "$refundAmount", // Asegúrate que este es el nombre correcto del campo
+                then: "$refundAmount",
                 else: 0,
               },
             },
@@ -800,7 +765,7 @@ const getTotalRevenue = async (req, res) => {
           _id: 0,
           status: "$_id",
           totalAmount: 1,
-          refundedAmountSum: 1, // Asegúrate de incluirlo en la proyección
+          refundedAmountSum: 1,
         },
       },
     ]);
@@ -809,7 +774,7 @@ const getTotalRevenue = async (req, res) => {
     let pickedUpRevenue = 0;
     let returnedRevenue = 0;
     let cancelledAmount = 0;
-    let cancelledRefundAmount = 0; // Nueva variable para el monto rembolsado
+    let cancelledRefundAmount = 0;
 
     revenueStats.forEach((stat) => {
       if (stat.status === "confirmed") {
@@ -820,7 +785,7 @@ const getTotalRevenue = async (req, res) => {
         returnedRevenue = stat.totalAmount || 0;
       } else if (stat.status === "cancelled") {
         cancelledAmount = stat.totalAmount || 0;
-        cancelledRefundAmount = stat.refundedAmountSum || 0; // Asigna el valor sumado aquí
+        cancelledRefundAmount = stat.refundedAmountSum || 0;
       }
     });
 
@@ -833,7 +798,7 @@ const getTotalRevenue = async (req, res) => {
       pickedUpRevenue,
       returnedRevenue,
       cancelledAmount,
-      cancelledRefundAmount, // AÑADE ESTO: Devuelve el monto rembolsado
+      cancelledRefundAmount,
     });
   } catch (error) {
     console.error("Error al obtener la facturación total:", error);
@@ -850,9 +815,8 @@ const getTotalRevenue = async (req, res) => {
 const getAllReservationsForReport = async (req, res) => {
   try {
     const reservations = await Reservation.find({})
-      // ***** CAMBIO CLAVE AQUÍ: Añadir 'refundAmount' a la selección *****
-      .select("reservationNumber startDate totalCost status refundAmount") // Asegúrate que 'refundAmount' es el nombre correcto del campo en tu modelo
-      .sort({ createdAt: -1 }); // Opcional: ordenar por fecha de creación descendente
+      .select("reservationNumber startDate totalCost status refundAmount")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -868,15 +832,317 @@ const getAllReservationsForReport = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Marcar una reserva como "retirada" (picked_up) y gestionar la disponibilidad del vehículo.
+ * Implementa la lógica de reemplazo de vehículos si el original no está disponible.
+ * @route   PUT /api/reservations/:id/pickup
+ * @access  Private (Admin, Employee)
+ *
+ * @param {string} req.params.id - ID de la reserva.
+ * @param {string} [req.body.replacementVehicleId] - Opcional. ID del vehículo de reemplazo seleccionado por el empleado.
+ */
+const pickupReservation = asyncHandler(async (req, res) => {
+  const reservationId = req.params.id;
+  const { replacementVehicleId } = req.body;
+
+  console.log(
+    `[BACKEND DEBUG] pickupReservation llamado para Reserva ID: ${reservationId}`
+  );
+  console.log(
+    `[BACKEND DEBUG] replacementVehicleId recibido: ${replacementVehicleId}`
+  );
+
+  // 1. Buscar la reserva y poblar los detalles necesarios
+  const reservation = await Reservation.findById(reservationId)
+    .populate("vehicle")
+    .populate("pickupBranch")
+    .populate("user", "username email");
+
+  if (!reservation) {
+    console.log(`[BACKEND DEBUG] Reserva ${reservationId} no encontrada.`);
+    res.status(404);
+    throw new Error("Reserva no encontrada.");
+  }
+  console.log(
+    `[BACKEND DEBUG] Estado actual de la reserva: ${reservation.status}`
+  );
+
+  // Regla 1: la reserva debe estar en estado “confirmed”
+  if (reservation.status !== "confirmed") {
+    console.log(
+      `[BACKEND DEBUG] La reserva no está en estado 'confirmed'. Estado: ${reservation.status}`
+    );
+    res.status(400);
+    throw new Error(
+      `La reserva debe estar en estado 'confirmed' para ser retirada. Estado actual: ${reservation.status}.`
+    );
+  }
+
+  let originalVehicle = reservation.vehicle;
+  console.log(
+    `[BACKEND DEBUG] Vehículo original de la reserva: ${originalVehicle.brand} ${originalVehicle.model} (${originalVehicle.licensePlate})`
+  );
+  console.log(
+    `[BACKEND DEBUG] Estado del vehículo original: isAvailable=${originalVehicle.isAvailable}, needsMaintenance=${originalVehicle.needsMaintenance}`
+  );
+
+  // Verificar si el vehículo original está disponible para la entrega.
+  // Se considera no disponible si needsMaintenance es true o isAvailable es false.
+  const isOriginalVehicleTrulyAvailableForPickup =
+    originalVehicle &&
+    !originalVehicle.needsMaintenance &&
+    originalVehicle.isAvailable;
+
+  console.log(
+    `[BACKEND DEBUG] isOriginalVehicleTrulyAvailableForPickup: ${isOriginalVehicleTrulyAvailableForPickup}`
+  );
+
+  // Si el vehículo original NO está disponible, buscar alternativas
+  if (!isOriginalVehicleTrulyAvailableForPickup) {
+    console.log(
+      `[BACKEND DEBUG] Vehículo original NO disponible para entrega directa. Buscando reemplazos.`
+    );
+
+    // Obtener IDs de vehículos ocupados por otras reservas en el rango de tiempo de esta reserva
+    // Excluir vehículos que ya están en otras reservas activas (confirmed, picked_up)
+    const allOverlappingReservations = await Reservation.find({
+      _id: { $ne: reservation._id }, // Excluir la reserva actual
+      status: { $in: ["confirmed", "picked_up"] }, // Considerar solo reservas activas
+      $or: [
+        // Verificar si las fechas se superponen
+        {
+          startDate: { $lt: reservation.endDate, $gte: reservation.startDate },
+        },
+        { endDate: { $gt: reservation.startDate, $lte: reservation.endDate } },
+        {
+          startDate: { $lte: reservation.startDate },
+          endDate: { $gte: reservation.endDate },
+        },
+      ],
+    }).select("vehicle");
+    const allReservedVehicleIds = allOverlappingReservations.map((res) =>
+      res.vehicle.toString()
+    );
+
+    // Buscar vehículos disponibles en la misma sucursal de retiro
+    const availableVehiclesInBranch = await Vehicle.find({
+      _id: { $nin: allReservedVehicleIds }, // Excluir vehículos ya reservados por otras reservas
+      branch: reservation.pickupBranch._id,
+      isAvailable: true, // Debe estar disponible para ser un reemplazo
+      needsMaintenance: false, // No debe necesitar mantenimiento
+    }).sort({ pricePerDay: -1 }); // Ordenar por precio de mayor a menor para sugerir primero los más caros
+
+    console.log(
+      `[BACKEND DEBUG] Vehículos disponibles en la sucursal para reemplazo (antes de filtrar por precio): ${availableVehiclesInBranch.length}`
+    );
+
+    // Filtrar por precio
+    const higherOrEqualPriceVehicles = availableVehiclesInBranch.filter(
+      (v) => v.pricePerDay >= originalVehicle.pricePerDay
+    );
+    const lowerPriceVehicles = availableVehiclesInBranch.filter(
+      (v) => v.pricePerDay < originalVehicle.pricePerDay
+    );
+
+    console.log(
+      `[BACKEND DEBUG] Vehículos de mayor o igual precio: ${higherOrEqualPriceVehicles.length}`
+    );
+    console.log(
+      `[BACKEND DEBUG] Vehículos de menor precio: ${lowerPriceVehicles.length}`
+    );
+
+    // Si no hay vehículos disponibles en la sucursal que puedan ser reemplazo
+    if (availableVehiclesInBranch.length === 0) {
+      console.log(
+        `[BACKEND DEBUG] No hay vehículos de reemplazo disponibles en la sucursal.`
+      );
+      res.status(200).json({
+        message:
+          "El vehículo original no está disponible y no hay reemplazos en esta sucursal. Por favor, contacta a un administrador.",
+        originalVehicleUnavailable: true,
+        availableReplacements: {
+          higherOrEqualPrice: [],
+          lowerPrice: [],
+        },
+      });
+      return;
+    }
+
+    // Si se envió un replacementVehicleId desde el frontend (empleado ya seleccionó uno)
+    if (replacementVehicleId) {
+      console.log(
+        `[BACKEND DEBUG] Se recibió un replacementVehicleId: ${replacementVehicleId}`
+      );
+      const selectedReplacementVehicle = availableVehiclesInBranch.find(
+        (v) => v._id.toString() === replacementVehicleId
+      );
+
+      if (!selectedReplacementVehicle) {
+        console.log(
+          `[BACKEND DEBUG] Vehículo de reemplazo seleccionado ${replacementVehicleId} no es válido o no está disponible.`
+        );
+        res.status(400).json({
+          message:
+            "El vehículo de reemplazo seleccionado no es válido o no está disponible.",
+          originalVehicleUnavailable: true, // Mantener esta bandera para que el frontend sepa que debe mostrar el modal
+          availableReplacements: {
+            // Devolver las opciones de nuevo
+            higherOrEqualPrice: higherOrEqualPriceVehicles.map((v) => ({
+              _id: v._id,
+              brand: v.brand,
+              model: v.model,
+              licensePlate: v.licensePlate,
+              pricePerDay: v.pricePerDay,
+              photoUrl: v.photoUrl,
+              type: v.type,
+              capacity: v.capacity,
+              transmission: v.transmission,
+            })),
+            lowerPrice: lowerPriceVehicles.map((v) => ({
+              _id: v._id,
+              brand: v.brand,
+              model: v.model,
+              licensePlate: v.licensePlate,
+              pricePerDay: v.pricePerDay,
+              photoUrl: v.photoUrl,
+              type: v.type,
+              capacity: v.capacity,
+              transmission: v.transmission,
+            })),
+          },
+        });
+        return;
+      }
+      console.log(
+        `[BACKEND DEBUG] Vehículo de reemplazo seleccionado: ${selectedReplacementVehicle.brand} ${selectedReplacementVehicle.model}`
+      );
+
+      // Liberar el vehículo original (marcarlo como disponible si no está en mantenimiento)
+      if (originalVehicle) {
+        console.log(
+          `[BACKEND DEBUG] Liberando vehículo original: ${originalVehicle.licensePlate}`
+        );
+        if (!originalVehicle.needsMaintenance) {
+          originalVehicle.isAvailable = true;
+        }
+        await originalVehicle.save();
+      }
+
+      // Asignar el nuevo vehículo a la reserva
+      reservation.vehicle = selectedReplacementVehicle._id;
+      reservation.pickedUpAt = new Date();
+
+      // *** CAMBIO SOLICITADO: NO RECALCULAR EL COSTO TOTAL DE LA RESERVA ***
+      // La línea `reservation.totalCost = newTotalCost;` ha sido eliminada.
+      // La diferencia de precio ya no se calcula ni se aplica al totalCost de la reserva.
+
+      // Marcar el vehículo de reemplazo como no disponible
+      selectedReplacementVehicle.isAvailable = false;
+      await selectedReplacementVehicle.save();
+      console.log(
+        `[BACKEND DEBUG] Vehículo de reemplazo marcado como no disponible.`
+      );
+
+      // Actualizar el estado de la reserva
+      reservation.status = "picked_up";
+      await reservation.save();
+      console.log(
+        `[BACKEND DEBUG] Estado de la reserva cambiado a 'picked_up'.`
+      );
+
+      res.status(200).json({
+        message: `Vehículo original no disponible. Reserva actualizada con ${selectedReplacementVehicle.brand} ${selectedReplacementVehicle.model} (${selectedReplacementVehicle.licensePlate}) y marcada como retirada. El costo total de la reserva se mantiene sin cambios.`,
+        reservation,
+        replacementDetails: {
+          originalVehicle: {
+            brand: originalVehicle.brand,
+            model: originalVehicle.model,
+            licensePlate: originalVehicle.licensePlate,
+          },
+          newVehicle: {
+            brand: selectedReplacementVehicle.brand,
+            model: selectedReplacementVehicle.model,
+            licensePlate: selectedReplacementVehicle.licensePlate,
+            pricePerDay: selectedReplacementVehicle.pricePerDay, // Se mantiene para información, no para cálculo
+          },
+          priceDifference: 0, // Siempre 0 ya que no se ajusta el costo
+        },
+      });
+      return;
+    } else {
+      // Si el original no está disponible y NO se ha seleccionado un reemplazo,
+      // se devuelve la lista de opciones al frontend para que el empleado elija.
+      console.log(
+        `[BACKEND DEBUG] Devolviendo opciones de reemplazo al frontend (para selección).`
+      );
+      res.status(200).json({
+        message:
+          "El vehículo original no está disponible. Por favor, selecciona un vehículo de reemplazo.",
+        originalVehicleUnavailable: true,
+        availableReplacements: {
+          higherOrEqualPrice: higherOrEqualPriceVehicles.map((v) => ({
+            _id: v._id,
+            brand: v.brand,
+            model: v.model,
+            licensePlate: v.licensePlate,
+            pricePerDay: v.pricePerDay,
+            photoUrl: v.photoUrl,
+            type: v.type,
+            capacity: v.capacity,
+            transmission: v.transmission,
+          })),
+          lowerPrice: lowerPriceVehicles.map((v) => ({
+            _id: v._id,
+            brand: v.brand,
+            model: v.model,
+            licensePlate: v.licensePlate,
+            pricePerDay: v.pricePerDay,
+            photoUrl: v.photoUrl,
+            type: v.type,
+            capacity: v.capacity,
+            transmission: v.transmission,
+          })),
+        },
+      });
+      return;
+    }
+  }
+
+  // Escenario 1: Vehículo original disponible y no se necesita reemplazo
+  console.log(
+    `[BACKEND DEBUG] Vehículo original disponible. Procediendo con la entrega.`
+  );
+  // Marcar el vehículo original como no disponible
+  if (originalVehicle) {
+    originalVehicle.isAvailable = false;
+    await originalVehicle.save();
+    console.log(
+      `[BACKEND DEBUG] Vehículo original marcado como no disponible.`
+    );
+  }
+
+  // Actualizar el estado de la reserva
+  reservation.status = "picked_up";
+  reservation.pickedUpAt = new Date();
+  await reservation.save();
+  console.log(`[BACKEND DEBUG] Estado de la reserva cambiado a 'picked_up'.`);
+
+  res.status(200).json({
+    message: `Reserva ${reservation.reservationNumber} marcada como retirada. Vehículo ${originalVehicle.brand} ${originalVehicle.model} (${originalVehicle.licensePlate}) entregado.`,
+    reservation,
+  });
+});
+
 module.exports = {
   createReservation,
   getMyReservations,
   getReservationById,
   payReservation,
   cancelReservation,
-  updateReservationStatus, // <-- Esta función ahora solo maneja cambios de estado
   getReservationByNumber,
-  updateReservationAdicionales, // <-- Exporta la nueva función
+  updateReservationStatus,
+  updateReservationAdicionales,
   getTotalRevenue,
   getAllReservationsForReport,
+  pickupReservation,
 };

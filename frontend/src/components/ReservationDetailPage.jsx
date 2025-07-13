@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
-import styled from 'styled-components';
-import { useAuth } from '../context/AuthContext';
-import { getReservationById, cancelReservation } from '../api/reservations';
-
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import styled from "styled-components";
+import { useAuth } from "../context/AuthContext";
+import { getReservationById, cancelReservation } from "../api/reservations";
 
 const Container = styled.div`
   max-width: 700px;
@@ -12,7 +11,7 @@ const Container = styled.div`
   padding: 20px;
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 `;
 
 const Title = styled.h2`
@@ -51,34 +50,39 @@ const BackButton = styled.button`
 // ========= Modificaciones para botón y feedback =========
 // Botón con estilos según estado y deshabilitado durante carga
 const Button = styled.button.withConfig({
-  shouldForwardProp: (prop) => prop !== '$cancelled' && prop !== 'disabled'
+  shouldForwardProp: (prop) => prop !== "$cancelled" && prop !== "disabled",
 })`
-  background-color: ${props => (props.cancelled ? '#6c757d' : '#dc3545')};   /* Si ya está cancelada */
+  background-color: ${(props) =>
+    props.cancelled ? "#6c757d" : "#dc3545"}; /* Si ya está cancelada */
   color: white;
   padding: 10px 20px;
   border: none;
   border-radius: 5px;
-  cursor: ${props => (props.disabled ? 'not-allowed' : 'pointer')};   /* Sin pointer si está deshabilitado */
+  cursor: ${(props) =>
+    props.disabled
+      ? "not-allowed"
+      : "pointer"}; /* Sin pointer si está deshabilitado */
   margin-right: 10px;
-  opacity: ${props => (props.disabled ? 0.6 : 1)};    /* Menor opacidad si está desactivado */
+  opacity: ${(props) =>
+    props.disabled ? 0.6 : 1}; /* Menor opacidad si está desactivado */
   &:hover {
-    background-color: ${props =>
+    background-color: ${(props) =>
       props.disabled
-        ? ''
+        ? ""
         : props.cancelled
-          ? '#5a6268'
-          : '#c82333'
-    };   /* Hover condicional */
+        ? "#5a6268"
+        : "#c82333"}; /* Hover condicional */
   }
 `;
 
 // Mensaje de feedback tras acción (error o éxito)
 const Message = styled.p.withConfig({
-  shouldForwardProp: (prop) => prop !== '$error'
+  shouldForwardProp: (prop) => prop !== "$error",
 })`
   margin-top: 20px;
   font-weight: bold;
-  color: ${props => (props.error ? '#dc3545' : '#28a745')};   /* Rojo=error, verde=éxito */
+  color: ${(props) =>
+    props.error ? "#dc3545" : "#28a745"}; /* Rojo=error, verde=éxito */
   text-align: center;
 `;
 
@@ -102,12 +106,12 @@ function ReservationDetailPage() {
 
   const [reservation, setReservation] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [actionMsg, setActionMsg] = useState('');    // Mensaje tras cancelar
+  const [error, setError] = useState("");
+  const [actionMsg, setActionMsg] = useState(""); // Mensaje tras cancelar
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
     const fetchData = async () => {
@@ -115,8 +119,11 @@ function ReservationDetailPage() {
         const data = await getReservationById(id);
         setReservation(data);
       } catch (err) {
-        console.error('Error al cargar detalle de reserva:', err.response || err);
-        setError('No se pudo obtener la información de la reserva.');
+        console.error(
+          "Error al cargar detalle de reserva:",
+          err.response || err
+        );
+        setError("No se pudo obtener la información de la reserva.");
       } finally {
         setLoading(false);
       }
@@ -129,7 +136,9 @@ function ReservationDetailPage() {
     return (
       <Container>
         <Title>Detalle de Reserva</Title>
-        <p style={{ textAlign: 'center', color: '#555' }}>Cargando información…</p>
+        <p style={{ textAlign: "center", color: "#555" }}>
+          Cargando información…
+        </p>
       </Container>
     );
   }
@@ -155,38 +164,40 @@ function ReservationDetailPage() {
   }
 
   // Formato legible de fechas
-  const start = new Date(reservation.startDate).toLocaleDateString('es-AR');
-  const end   = new Date(reservation.endDate).toLocaleDateString('es-AR');
+  const start = new Date(reservation.startDate).toLocaleDateString("es-AR");
+  const end = new Date(reservation.endDate).toLocaleDateString("es-AR");
 
-
-  const canCancel = reservation.status === 'confirmed';    // Solo cancelar si está confirmada
+  const canCancel = reservation.status === "confirmed"; // Solo cancelar si está confirmada
 
   // NUEVA VARIABLE PARA CONTROLAR LA VISIBILIDAD DEL BOTÓN DE CANCELAR
   const showActionButton =
-    reservation.status !== 'picked_up' &&
-    reservation.status !== 'returned' &&
-    reservation.status !== 'completed';
+    reservation.status !== "picked_up" &&
+    reservation.status !== "returned" &&
+    reservation.status !== "completed";
 
   // Manejador de la cancelación
   const handleCancel = async () => {
-    if (!window.confirm('¿Seguro que deseas cancelar esta reserva?')) return;
-    setActionMsg('');    // Limpia mensaje previo
-    setLoading(true);    // Deshabilitar botón. marca como cargando
+    if (!window.confirm("¿Seguro que deseas cancelar esta reserva?")) return;
+    setActionMsg(""); // Limpia mensaje previo
+    setLoading(true); // Deshabilitar botón. marca como cargando
     try {
       const { refundAmount, refundType, message } = await cancelReservation(id);
       // Actualizar estado localmente para reflejar cambios
-      setReservation(prev => ({
+      setReservation((prev) => ({
         ...prev,
-        status: 'cancelled',
+        status: "cancelled",
         refundAmount,
-        canceledAt: new Date().toISOString()
+        canceledAt: new Date().toISOString(),
       }));
-      setActionMsg(`${message} (${refundType}, ARS ${refundAmount.toFixed(2)})`);    // Feedback
+      setActionMsg(
+        `${message} (${refundType}, ARS ${refundAmount.toFixed(2)})`
+      ); // Feedback
     } catch (err) {
-        console.error('[ERROR cancelar]', err.response || err);
-        // Mostrar mensaje del backend si lo hay
-        const msg = err.response?.data?.message || 'Error al cancelar la reserva.';
-        setActionMsg(msg);    // Mensaje de error
+      console.error("[ERROR cancelar]", err.response || err);
+      // Mostrar mensaje del backend si lo hay
+      const msg =
+        err.response?.data?.message || "Error al cancelar la reserva.";
+      setActionMsg(msg); // Mensaje de error
     } finally {
       setLoading(false);
     }
@@ -197,12 +208,14 @@ function ReservationDetailPage() {
       <Title>Detalle de Reserva #{reservation.reservationNumber}</Title>
 
       <Section>
-        <Label>Estado:</Label>{' '}
-        <Value style={{ textTransform: 'capitalize' }}>{reservation.status}</Value>
+        <Label>Estado:</Label>{" "}
+        <Value style={{ textTransform: "capitalize" }}>
+          {reservation.status}
+        </Value>
       </Section>
 
       <Section>
-        <Label>Vehículo:</Label>{' '}
+        <Label>Vehículo:</Label>{" "}
         <Value>
           {reservation.vehicle.brand} {reservation.vehicle.model} (
           {reservation.vehicle.licensePlate})
@@ -210,28 +223,35 @@ function ReservationDetailPage() {
       </Section>
 
       <Section>
-        <Label>Fechas de alquiler:</Label>{' '}
-        <Value>{start} – {end}</Value>
+        <Label>Fechas de alquiler:</Label>{" "}
+        <Value>
+          {start} – {end}
+        </Value>
       </Section>
 
       <Section>
-        <Label>Sucursal de Retiro:</Label>{' '}
-        <Value>{reservation.pickupBranch.name} ({reservation.pickupBranch.address})</Value>
+        <Label>Sucursal de Retiro:</Label>{" "}
+        <Value>
+          {reservation.pickupBranch.name} ({reservation.pickupBranch.address})
+        </Value>
       </Section>
 
       <Section>
-        <Label>Sucursal de Devolución:</Label>{' '}
-        <Value>{reservation.returnBranch.name} ({reservation.returnBranch.address})</Value>
+        <Label>Sucursal de Devolución:</Label>{" "}
+        <Value>
+          {reservation.returnBranch.name} ({reservation.returnBranch.address})
+        </Value>
       </Section>
-      
+
       {/* SECCIÓN PARA ADICIONALES */}
       {reservation.adicionales && reservation.adicionales.length > 0 && (
         <Section>
-          <Label>Adicionales:</Label>{' '}
+          <Label>Adicionales:</Label>{" "}
           <Value>
             {reservation.adicionales.map((item, index) => (
-              <p key={index} style={{ margin: '5px 0' }}>
-                {item.quantity} x {item.adicional?.name} (ARS {item.itemPrice?.toFixed(2)} c/u)
+              <p key={index} style={{ margin: "5px 0" }}>
+                {item.quantity} x {item.adicional?.name} (ARS{" "}
+                {item.itemPrice?.toFixed(2)} c/u)
               </p>
             ))}
           </Value>
@@ -240,49 +260,53 @@ function ReservationDetailPage() {
       {/* FIN DE LA SECCIÓN DE ADICIONALES */}
 
       <Section>
-        <Label>Costo Total:</Label>{' '}
+        <Label>Costo Total:</Label>{" "}
         <Value>ARS {reservation.totalCost.toFixed(2)}</Value>
       </Section>
 
       {reservation.paymentInfo && reservation.paymentInfo.status && (
         <Section>
-          <Label>Pago:</Label>{' '}
-          <Value style={{ textTransform: 'capitalize' }}>
+          <Label>Pago:</Label>{" "}
+          <Value style={{ textTransform: "capitalize" }}>
             {reservation.paymentInfo.status}
           </Value>
         </Section>
       )}
-      
+
       {/* Mostrar el mensaje de recordatorio solo si la reserva está confirmada */}
-      {console.log('DEBUG [ReservationDetailPage]: reservation.status para recordatorio:', reservation.status)}
-      {reservation.status === 'confirmed' && (
+      {console.log(
+        "DEBUG [ReservationDetailPage]: reservation.status para recordatorio:",
+        reservation.status
+      )}
+      {reservation.status === "confirmed" && (
         <ReminderMessage>
-          Recibirás un recordatorio por email 2 días antes de la fecha de retiro de tu vehículo.
+          Recibirás un recordatorio por email 2 días antes de la fecha de retiro
+          de tu vehículo.
         </ReminderMessage>
       )}
-
 
       <div>
         {showActionButton && ( // <-- CONDICIONAL APLICADO AQUÍ
           <Button
             onClick={handleCancel}
             disabled={!canCancel || loading}
-            cancelled={reservation.status==='cancelled'}
+            cancelled={reservation.status === "cancelled"}
           >
-            {reservation.status==='cancelled' ? 'Cancelada' : 'Cancelar Reserva'}
+            {reservation.status === "cancelled"
+              ? "Cancelada"
+              : "Cancelar Reserva"}
           </Button>
         )}
-        <BackButton onClick={() => navigate('/my-reservations')}>
+        <BackButton onClick={() => navigate("/my-reservations")}>
           Volver a Mi Historial
         </BackButton>
       </div>
 
       {actionMsg && (
-        <Message error={reservation.status!=='cancelled'}>
+        <Message error={reservation.status !== "cancelled"}>
           {actionMsg}
         </Message>
       )}
-
     </Container>
   );
 }

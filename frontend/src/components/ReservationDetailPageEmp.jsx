@@ -1,9 +1,12 @@
-// frontend/src/pages/ReservationDetailPageEmp.jsx
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom"; // Importa useParams
+import { useNavigate, useParams } from "react-router-dom";
 import styled from "styled-components";
 import axiosInstance from "../api/axiosInstance";
+import { toast } from "react-toastify"; // Importa toast
+import "react-toastify/dist/ReactToastify.css"; // Asegúrate de importar los estilos
+import { useAuth } from "../context/AuthContext"; // Importa useAuth para el rol
 
+// Styled Components (manteniendo los que ya tenías y añadiendo los nuevos)
 const PageContainer = styled.div`
   background-color: #f0f2f5;
   min-height: 100vh;
@@ -11,7 +14,7 @@ const PageContainer = styled.div`
   box-sizing: border-box;
   color: #333;
   display: flex;
-  justify-content: center; /* Centrado en lugar de flex-start para esta página */
+  justify-content: center;
   align-items: flex-start;
 
   @media (max-width: 768px) {
@@ -23,7 +26,7 @@ const PageContainer = styled.div`
 
 const MainContent = styled.div`
   flex-grow: 1;
-  max-width: 900px; /* Ancho máximo para el contenido principal */
+  max-width: 900px;
   padding: 20px;
   background-color: #fff;
   border-radius: 10px;
@@ -87,10 +90,6 @@ const Button = styled.button`
   }
 `;
 
-// Omitimos FilterSidebar, VehicleGrid, VehicleCard, VehicleImage, etc.
-// Ya que esta página solo mostrará una reserva específica, no una lista.
-
-// **** STYLED COMPONENTS PARA EL MODAL ****
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -149,7 +148,6 @@ const ModalActions = styled.div`
   gap: 10px;
   margin-top: 15px;
 `;
-// **** FIN: STYLED COMPONENTS PARA EL MODAL ****
 
 const ReportTable = styled.table`
   width: 100%;
@@ -194,7 +192,6 @@ const ReportTable = styled.table`
     td {
       padding: 8px 10px;
     }
-    /* Esto forzaría a las tablas a ser desplazables en pantallas pequeñas */
     display: block;
     overflow-x: auto;
     white-space: nowrap;
@@ -285,7 +282,6 @@ const ActionButton = styled.button`
   }
 `;
 
-// *** STYLED COMPONENTS PARA LA SELECCIÓN DE ADICIONALES ***
 const AdicionalesSection = styled.div`
   margin-top: 20px;
   padding-top: 20px;
@@ -358,44 +354,104 @@ const AdicionalesTotal = styled.p`
   border-top: 1px solid #eee;
 `;
 
-function ReservationDetailPageEmp() { // Cambia el nombre del componente
-  const navigate = useNavigate();
-  const { id } = useParams(); // Obtiene el ID de la reserva de la URL
-  const [reservation, setReservation] = useState(null);
-  const [loading, setLoading] = useState(true); // Inicia cargando la reserva por ID
-  const [error, setError] = useState(null);
-  const [userRole, setUserRole] = useState(null);
+// Estilos específicos para el modal de reemplazo de vehículos
+const VehicleListContainer = styled.div`
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  padding: 10px;
+  margin-top: 15px;
+  text-align: left;
+`;
 
-  // Modal para confirmación de cancelación
+const VehicleItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: ${(props) =>
+    props.$isSelected ? "#e6f7ff" : "transparent"};
+  cursor: pointer;
+  &:hover {
+    background-color: #f9f9f9;
+  }
+  &:last-child {
+    border-bottom: none;
+  }
+
+  img {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 5px;
+  }
+
+  div {
+    flex-grow: 1;
+  }
+
+  h5 {
+    margin: 0;
+    color: #007bff;
+    font-size: 1.1em;
+  }
+
+  p {
+    margin: 2px 0;
+    font-size: 0.9em;
+    color: #555;
+  }
+`;
+
+const VehicleTypeHeader = styled.h4`
+  color: #0056b3;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+`;
+
+function ReservationDetailPageEmp() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const [reservation, setReservation] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState(null);
 
-  // Modal para confirmar cambio de estado (solo para 'returned')
   const [showStatusConfirmModal, setShowStatusConfirmModal] = useState(false);
   const [statusChangeLoading, setStatusChangeLoading] = useState(false);
   const [statusChangeError, setStatusChangeError] = useState(null);
   const [statusToChangeTo, setStatusToChangeTo] = useState(null);
 
-  // Estados para adicionales
   const [availableAdicionales, setAvailableAdicionales] = useState([]);
-  const [selectedAdicionales, setSelectedAdicionales] = useState([]); // Array de { _id: adicionalId, quantity: N }
-  // Nuevo estado para controlar el modal de adicionales
+  const [selectedAdicionales, setSelectedAdicionales] = useState([]);
   const [showAdicionalesModal, setShowAdicionalesModal] = useState(false);
   const [adicionalesLoading, setAdicionalesLoading] = useState(false);
   const [adicionalesError, setAdicionalesError] = useState(null);
 
-  // Estado para el motivo de mantenimiento
   const [maintenanceReason, setMaintenanceReason] = useState("");
 
-  useEffect(() => {
-    const role = localStorage.getItem("userRole");
-    setUserRole(role);
-    const token = localStorage.getItem("token");
-    if (!token) {
-      navigate("/login");
-    }
+  // NUEVOS ESTADOS PARA EL MODAL DE REEMPLAZO DE VEHÍCULOS
+  const [showReplacementModal, setShowReplacementModal] = useState(false);
+  const [replacementVehicles, setReplacementVehicles] = useState({
+    higherOrEqualPrice: [],
+    lowerPrice: [],
+  });
+  const [selectedReplacementVehicleId, setSelectedReplacementVehicleId] =
+    useState(null);
+  const [replacementModalMessage, setReplacementModalMessage] = useState("");
+  const [replacementLoading, setReplacementLoading] = useState(false);
 
+  const { user } = useAuth(); // Obtener user del AuthContext
+  const userRole = user ? user.role : null;
+
+  useEffect(() => {
     // Cargar adicionales disponibles al montar el componente
     const fetchAdicionales = async () => {
       try {
@@ -403,14 +459,21 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
         setAvailableAdicionales(response.data);
       } catch (err) {
         console.error("Error al cargar adicionales:", err);
+        toast.error("Error al cargar adicionales.");
       }
     };
     fetchAdicionales();
-  }, [navigate]);
+  }, []);
 
   const fetchReservation = useCallback(async () => {
+    // *** DEBUG: Log del ID recibido ***
+    console.log(
+      "DEBUG: ID de reserva en useParams (ReservationDetailPageEmp):",
+      id
+    );
+
     if (!id) {
-      setError("ID de reserva no proporcionado.");
+      setError("ID de reserva no proporcionado en la URL.");
       setReservation(null);
       setLoading(false);
       return;
@@ -419,14 +482,20 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
     setLoading(true);
     setError(null);
     setReservation(null);
-    setSelectedAdicionales([]); // Limpiar adicionales seleccionados al cargar nueva reserva
-    setMaintenanceReason(""); // Limpiar motivo de mantenimiento
+    setSelectedAdicionales([]);
+    setMaintenanceReason("");
 
     try {
-      // Usa el ID de la URL para buscar la reserva
-      const response = await axiosInstance.get(`/reservations/${id}`);
+      const token = localStorage.getItem("token"); // Obtener token de localStorage
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      const response = await axiosInstance.get(`/reservations/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setReservation(response.data);
-      // Al cargar la reserva, pre-seleccionar los adicionales existentes
       if (response.data.adicionales && response.data.adicionales.length > 0) {
         setSelectedAdicionales(
           response.data.adicionales.map((item) => ({
@@ -441,48 +510,91 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
         err.response?.data?.message ||
           "Error al cargar la reserva. Asegúrate de que el ID es correcto y tienes permisos."
       );
+      toast.error(err.response?.data?.message || "Error al cargar la reserva.");
     } finally {
       setLoading(false);
     }
-  }, [id]); // Dependencia del ID de la URL
+  }, [id, navigate]);
 
   useEffect(() => {
-    fetchReservation(); // Llama a la función para cargar la reserva al montar o cambiar el ID
-  }, [fetchReservation]);
+    // Si no hay usuario autenticado (después de la carga inicial del AuthContext), redirigir.
+    if (!user && !localStorage.getItem("token")) {
+      navigate("/login");
+      return;
+    }
+    fetchReservation();
+  }, [fetchReservation, user, navigate]);
 
-  const handleChangeStatus = async (newStatus) => {
+  const handleChangeStatus = async (newStatus, replacementVehicleId = null) => {
     if (!reservation) return;
 
-    if (newStatus === "picked_up") {
-      setStatusChangeLoading(true);
-      setStatusChangeError(null);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/login");
-        setStatusChangeLoading(false);
-        return;
-      }
-      try {
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setReplacementLoading(true); // Para el modal de reemplazo
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      setStatusChangeLoading(false);
+      setReplacementLoading(false);
+      return;
+    }
+
+    try {
+      if (newStatus === "picked_up") {
+        const payload = replacementVehicleId ? { replacementVehicleId } : {};
+        const response = await axiosInstance.put(
+          `/reservations/${reservation._id}/pickup`, // Llama al nuevo endpoint de pickup
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.data.originalVehicleUnavailable) {
+          // Escenario: Vehículo original no disponible, mostrar modal de reemplazo
+          setShowReplacementModal(true);
+          setReplacementModalMessage(response.data.message);
+          setReplacementVehicles(response.data.availableReplacements);
+          setSelectedReplacementVehicleId(null); // Resetear selección
+          toast.info(response.data.message); // Mensaje informativo
+        } else {
+          // Escenario: Entrega exitosa sin necesidad de reemplazo
+          toast.success(response.data.message);
+          setShowReplacementModal(false); // Asegurarse de cerrar si estaba abierto
+        }
+      } else if (newStatus === "returned") {
+        // Abre el modal para pedir el motivo de mantenimiento
+        setShowStatusConfirmModal(true);
+        setStatusToChangeTo(newStatus);
+        setStatusChangeError(null); // Limpiar errores previos del modal
+        setMaintenanceReason(""); // Asegurarse de que el input esté vacío al abrir el modal
+        setStatusChangeLoading(false); // Desactivar loading mientras el modal está abierto
+        setReplacementLoading(false); // También para el modal de reemplazo
+        return; // Salir de la función para esperar la confirmación del modal
+      } else {
+        // Para otros cambios de estado (ej. "completed") que usen /status
         await axiosInstance.put(
           `/reservations/${reservation._id}/status`,
-          { status: newStatus }
+          { status: newStatus },
+          { headers: { Authorization: `Bearer ${token}` } }
         );
-        alert(`Reserva actualizada a estado: ${newStatus.replace("_", " ")}`);
-        fetchReservation();
-      } catch (err) {
-        console.error(`Error al cambiar estado a ${newStatus}:`, err);
-        setStatusChangeError(
-          err.response?.data?.message ||
-            `Error al cambiar el estado a ${newStatus.replace("_", " ")}.`
+        toast.success(
+          `Reserva actualizada a estado: ${newStatus.replace("_", " ")}`
         );
-      } finally {
-        setStatusChangeLoading(false);
       }
-    } else if (newStatus === "returned") {
-      setShowStatusConfirmModal(true);
-      setStatusToChangeTo(newStatus);
-      setStatusChangeError(null);
-      setMaintenanceReason("");
+      fetchReservation(); // Recargar la reserva para ver el nuevo estado
+    } catch (err) {
+      console.error(`Error al cambiar estado a ${newStatus}:`, err);
+      setStatusChangeError(
+        err.response?.data?.message ||
+          `Error al cambiar el estado a ${newStatus.replace("_", " ")}.`
+      );
+      toast.error(
+        err.response?.data?.message ||
+          `Error al cambiar el estado a ${newStatus.replace("_", " ")}.`
+      );
+    } finally {
+      setStatusChangeLoading(false);
+      setReplacementLoading(false);
     }
   };
 
@@ -490,7 +602,6 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
     if (!reservation) return;
     setShowAdicionalesModal(true);
     setAdicionalesError(null);
-    // Asegurarse de que los adicionales seleccionados reflejen los actuales de la reserva
     if (reservation.adicionales && reservation.adicionales.length > 0) {
       setSelectedAdicionales(
         reservation.adicionales.map((item) => ({
@@ -538,10 +649,13 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
     try {
       await axiosInstance.put(
         `/reservations/${reservation._id}/adicionales`,
-        { adicionales: selectedAdicionales }
+        {
+          adicionales: selectedAdicionales,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      
-      alert("Adicionales actualizados exitosamente.");
+
+      toast.success("Adicionales actualizados exitosamente.");
       setShowAdicionalesModal(false);
       fetchReservation();
     } catch (err) {
@@ -550,12 +664,15 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
         err.response?.data?.message ||
           "Error al actualizar los adicionales de la reserva."
       );
+      toast.error(
+        err.response?.data?.message ||
+          "Error al actualizar los adicionales de la reserva."
+      );
     } finally {
       setAdicionalesLoading(false);
     }
   }, [reservation, navigate, fetchReservation, selectedAdicionales]);
 
-  // *** CALCULAR EL TOTAL DE ADICIONALES SELECCIONADOS ***
   const totalAdicionalesCost = useMemo(() => {
     return selectedAdicionales.reduce((total, selectedAdicional) => {
       const adicional = availableAdicionales.find(
@@ -567,10 +684,22 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       return total;
     }, 0);
   }, [selectedAdicionales, availableAdicionales]);
-  // *** FIN CALCULAR EL TOTAL ***
 
   const confirmStatusChange = useCallback(async () => {
     if (!reservation || !statusToChangeTo) return;
+
+    if (
+      statusToChangeTo === "returned" &&
+      (!maintenanceReason || maintenanceReason.trim() === "")
+    ) {
+      setStatusChangeError(
+        "El motivo de mantenimiento es obligatorio al marcar como devuelto."
+      );
+      toast.error(
+        "El motivo de mantenimiento es obligatorio al marcar como devuelto."
+      );
+      return;
+    }
 
     setStatusChangeLoading(true);
     setStatusChangeError(null);
@@ -578,6 +707,7 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
     const token = localStorage.getItem("token");
     if (!token) {
       navigate("/login");
+      setStatusChangeLoading(false);
       return;
     }
 
@@ -585,30 +715,34 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       let updateReservationBody = { status: statusToChangeTo };
 
       if (statusToChangeTo === "returned") {
-        if (!maintenanceReason || maintenanceReason.trim() === "") {
-          setStatusChangeError("El motivo de mantenimiento es obligatorio al marcar como devueltoo.");
-          setStatusChangeLoading(false);
-          return;
-        }
-        updateReservationBody.maintenanceReason = maintenanceReason;
+        updateReservationBody.maintenanceReason = maintenanceReason.trim();
+        // Lógica para marcar vehículo para mantenimiento (si aplica)
         if (reservation.vehicle && reservation.vehicle._id) {
           try {
             await axiosInstance.put(
               `/vehicles/${reservation.vehicle._id}/status`,
-              { needsMaintenance: true, maintenanceReason: maintenanceReason }
+              { needsMaintenance: true, maintenanceReason: maintenanceReason },
+              { headers: { Authorization: `Bearer ${token}` } }
             );
-            console.log(`Vehículo ${reservation.vehicle.licensePlate} (${reservation.vehicle._id}) marcado para mantenimiento.`);
+            console.log(
+              `Vehículo ${reservation.vehicle.licensePlate} (${reservation.vehicle._id}) marcado para mantenimiento.`
+            );
           } catch (vehicleErr) {
-            console.error("Error al actualizar el estado del vehículo a mantenimiento:", vehicleErr);
+            console.error(
+              "Error al actualizar el estado del vehículo a mantenimiento:",
+              vehicleErr
+            );
             setStatusChangeError(
               vehicleErr.response?.data?.message ||
-              "Error al actualizar el estado del vehículo a mantenimiento. Intenta de nuevo."
+                "Error al actualizar el estado del vehículo a mantenimiento. Intenta de nuevo."
             );
             setStatusChangeLoading(false);
             return;
           }
         } else {
-          setStatusChangeError("No se encontró el ID del vehículo asociado a la reserva.");
+          setStatusChangeError(
+            "No se encontró el ID del vehículo asociado a la reserva."
+          );
           setStatusChangeLoading(false);
           return;
         }
@@ -616,24 +750,36 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
 
       await axiosInstance.put(
         `/reservations/${reservation._id}/status`,
-        updateReservationBody
+        updateReservationBody,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      
-      alert(`Reserva actualizada a estado: ${statusToChangeTo.replace("_", " ")}`);
+
+      toast.success(
+        `Reserva actualizada a estado: ${statusToChangeTo.replace("_", " ")}`
+      );
       setShowStatusConfirmModal(false);
       setMaintenanceReason("");
       fetchReservation();
-
     } catch (err) {
       console.error(`Error al cambiar estado a ${statusToChangeTo}:`, err);
       setStatusChangeError(
         err.response?.data?.message ||
           `Error al cambiar el estado a ${statusToChangeTo.replace("_", " ")}.`
       );
+      toast.error(
+        err.response?.data?.message ||
+          `Error al cambiar el estado a ${statusToChangeTo.replace("_", " ")}.`
+      );
     } finally {
       setStatusChangeLoading(false);
     }
-  }, [reservation, statusToChangeTo, navigate, fetchReservation, maintenanceReason]);
+  }, [
+    reservation,
+    statusToChangeTo,
+    navigate,
+    fetchReservation,
+    maintenanceReason,
+  ]);
 
   const handleCancelReservation = () => {
     if (!reservation) return;
@@ -655,14 +801,19 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
 
     try {
       const response = await axiosInstance.put(
-        `/reservations/${reservation._id}/cancel`
+        `/reservations/${reservation._id}/cancel`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      alert(response.data.message);
+      toast.success(response.data.message);
       setShowCancelConfirmModal(false);
       fetchReservation();
     } catch (err) {
       console.error("Error al cancelar reserva:", err);
       setCancelError(
+        err.response?.data?.message || "Error al cancelar la reserva."
+      );
+      toast.error(
         err.response?.data?.message || "Error al cancelar la reserva."
       );
     } finally {
@@ -671,8 +822,7 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
   }, [reservation, navigate, fetchReservation]);
 
   const handleGoBack = () => {
-    // Vuelve a la página de búsqueda
-    navigate("/reservation-status");
+    navigate("/reservation-status-page"); // Ajusta esta ruta si es diferente en tu App.jsx
   };
 
   const formatDate = (dateString) => {
@@ -686,12 +836,74 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
     });
   };
 
+  // --- FUNCIONES PARA RENDERIZAR LOADER Y MENSAJES (REEMPLAZO DE COMPONENTES EXTERNOS) ---
+  const renderLoader = () => (
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <p>Cargando...</p>
+      <div
+        style={{
+          border: "4px solid #f3f3f3",
+          borderTop: "4px solid #007bff",
+          borderRadius: "50%",
+          width: "40px",
+          height: "40px",
+          animation: "spin 1s linear infinite",
+          margin: "10px auto",
+        }}
+      ></div>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  const renderMessage = (type, message) => (
+    <div
+      style={{
+        padding: "15px",
+        margin: "20px 0",
+        borderRadius: "5px",
+        fontSize: "1em",
+        textAlign: "center",
+        fontWeight: "bold",
+        backgroundColor:
+          type === "danger"
+            ? "#f8d7da"
+            : type === "info"
+            ? "#d1ecf1"
+            : "#d4edda",
+        color:
+          type === "danger"
+            ? "#721c24"
+            : type === "info"
+            ? "#0c5460"
+            : "#155724",
+        border: `1px solid ${
+          type === "danger"
+            ? "#f5c6cb"
+            : type === "info"
+            ? "#bee5eb"
+            : "#c3e6cb"
+        }`,
+      }}
+    >
+      {message}
+    </div>
+  );
+  // --- FIN FUNCIONES DE RENDERIZADO ---
+
   if (loading) {
     return (
       <PageContainer>
         <MainContent>
           <PageTitle>Cargando Reserva...</PageTitle>
-          <PageSubText>Por favor, espera mientras cargamos los detalles.</PageSubText>
+          <PageSubText>
+            Por favor, espera mientras cargamos los detalles.
+          </PageSubText>
+          {renderLoader()}
         </MainContent>
       </PageContainer>
     );
@@ -702,7 +914,7 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       <PageContainer>
         <MainContent>
           <PageTitle>Error</PageTitle>
-          <PageSubText style={{ color: 'red' }}>{error}</PageSubText>
+          {renderMessage("danger", error)}
           <Button onClick={handleGoBack}>Volver a Búsqueda</Button>
         </MainContent>
       </PageContainer>
@@ -714,7 +926,10 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       <PageContainer>
         <MainContent>
           <PageTitle>Reserva No Encontrada</PageTitle>
-          <PageSubText>No se pudo cargar la información de la reserva.</PageSubText>
+          {renderMessage(
+            "info",
+            "No se pudo cargar la información de la reserva."
+          )}
           <Button onClick={handleGoBack}>Volver a Búsqueda</Button>
         </MainContent>
       </PageContainer>
@@ -726,7 +941,8 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       <MainContent>
         <PageTitle>Detalles de la Reserva</PageTitle>
         <PageSubText>
-          Información completa y gestión para la reserva #{reservation.reservationNumber}.
+          Información completa y gestión para la reserva #
+          {reservation.reservationNumber}.
         </PageSubText>
 
         <ReservationDetailsContainer $status={reservation.status}>
@@ -767,7 +983,6 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
           <p>
             <span>Costo Total:</span> ARS {reservation.totalCost.toFixed(2)}
           </p>
-          {/* MOSTRAR ADICIONALES YA ASOCIADOS A LA RESERVA */}
           {reservation.adicionales && reservation.adicionales.length > 0 && (
             <AdicionalesSection>
               <h4>Adicionales de la Reserva:</h4>
@@ -802,8 +1017,7 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
           {reservation.status === "cancelled" && (
             <>
               <p>
-                <span>Cancelada el:</span>{" "}
-                {formatDate(reservation.canceledAt)}
+                <span>Cancelada el:</span> {formatDate(reservation.canceledAt)}
               </p>
               <p>
                 <span>Monto Reembolsado:</span> ARS{" "}
@@ -823,47 +1037,43 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
             <span>Creada el:</span> {formatDate(reservation.createdAt)}
           </p>
 
-          {/* Acciones para empleados/administradores */}
           {(userRole === "employee" || userRole === "admin") && (
             <ActionsContainer>
-              {/* Botón para "Marcar como Retirado" */}
               {reservation.status === "confirmed" && (
                 <ActionButton
                   onClick={() => handleChangeStatus("picked_up")}
-                  $bgColor="#17a2b8" // Info blue
-                  disabled={statusChangeLoading}
+                  $bgColor="#17a2b8"
+                  disabled={statusChangeLoading || replacementLoading} // Deshabilitar si hay carga de reemplazo
                 >
                   Marcar como Retirado
                 </ActionButton>
               )}
 
-              {/* Botón para "Agregar Adicionales" */}
-              {(reservation.status === "confirmed" || reservation.status === "picked_up") && (
+              {(reservation.status === "confirmed" ||
+                reservation.status === "picked_up") && (
                 <ActionButton
                   onClick={handleAddAdicionales}
-                  $bgColor="#28a745" // Green
+                  $bgColor="#28a745"
                   disabled={adicionalesLoading}
                 >
                   Agregar Adicionales
                 </ActionButton>
               )}
 
-              {/* Botón para "Marcar como Devuelto" */}
               {reservation.status === "picked_up" && (
                 <ActionButton
                   onClick={() => handleChangeStatus("returned")}
-                  $bgColor="#6f42c1" // Purple
+                  $bgColor="#6f42c1"
                   disabled={statusChangeLoading}
                 >
                   Marcar como Devuelto
                 </ActionButton>
               )}
 
-              {/* Botón para Cancelar (visible si la reserva es confirmada) */}
               {reservation.status === "confirmed" && (
                 <ActionButton
                   onClick={handleCancelReservation}
-                  $bgColor="#dc3545" // Red
+                  $bgColor="#dc3545"
                   disabled={cancelLoading}
                 >
                   Cancelar Reserva
@@ -882,7 +1092,6 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
         </Button>
       </MainContent>
 
-      {/* Modal de confirmación de cancelación */}
       {showCancelConfirmModal && (
         <ModalOverlay>
           <ModalContent>
@@ -892,7 +1101,7 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
               <strong>#{reservation?.reservationNumber}</strong>? Esta acción no
               se puede deshacer.
             </p>
-            {cancelError && <p style={{ color: "red" }}>{cancelError}</p>}
+            {cancelError && renderMessage("danger", cancelError)}
             <ModalActions>
               <Button
                 className="secondary"
@@ -901,7 +1110,10 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
               >
                 No, Volver
               </Button>
-              <Button onClick={confirmCancelReservation} disabled={cancelLoading}>
+              <Button
+                onClick={confirmCancelReservation}
+                disabled={cancelLoading}
+              >
                 {cancelLoading ? "Cancelando..." : "Sí, Cancelar"}
               </Button>
             </ModalActions>
@@ -909,18 +1121,16 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
         </ModalOverlay>
       )}
 
-      {/* Modal de confirmación de cambio de estado (solo para 'returned') */}
       {showStatusConfirmModal && (
         <ModalOverlay>
           <ModalContent>
             <h2>Confirmar Cambio de Estado</h2>
             <p>
               ¿Estás seguro de que deseas cambiar el estado de la reserva{" "}
-              <strong>#{reservation?.reservationNumber}</strong> a{" "}
-              **{statusToChangeTo?.replace("_", " ").toUpperCase()}**?
+              <strong>#{reservation?.reservationNumber}</strong> a **
+              {statusToChangeTo?.replace("_", " ").toUpperCase()}**?
             </p>
 
-            {/* Sección para motivo de mantenimiento (solo si el estado es 'returned') */}
             {statusToChangeTo === "returned" && (
               <AdicionalesSection>
                 <h4>Motivo de Mantenimiento:</h4>
@@ -929,14 +1139,16 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
                   onChange={(e) => setMaintenanceReason(e.target.value)}
                   placeholder="Describe el motivo por el cual el vehículo requiere mantenimiento..."
                   rows="4"
-                  required
                 />
-                {statusChangeError && statusChangeError.includes("motivo") && (
-                  <p style={{ color: "red", marginTop: "5px" }}>{statusChangeError}</p>
-                )}
+                {statusChangeError &&
+                  statusChangeError.includes("motivo") &&
+                  renderMessage("danger", statusChangeError)}
               </AdicionalesSection>
             )}
 
+            {statusChangeError &&
+              !statusChangeError.includes("motivo") &&
+              renderMessage("danger", statusChangeError)}
             <ModalActions>
               <Button
                 className="secondary"
@@ -945,7 +1157,10 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
               >
                 No, Volver
               </Button>
-              <Button onClick={confirmStatusChange} disabled={statusChangeLoading}>
+              <Button
+                onClick={confirmStatusChange}
+                disabled={statusChangeLoading}
+              >
                 {statusChangeLoading ? "Cambiando..." : "Sí, Confirmar"}
               </Button>
             </ModalActions>
@@ -957,7 +1172,10 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
       {showAdicionalesModal && (
         <ModalOverlay>
           <ModalContent>
-            <h2>Gestionar Adicionales para Reserva #{reservation?.reservationNumber}</h2>
+            <h2>
+              Gestionar Adicionales para Reserva #
+              {reservation?.reservationNumber}
+            </h2>
             <p>
               Selecciona los adicionales y sus cantidades para esta reserva.
             </p>
@@ -965,63 +1183,58 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
             <AdicionalesSection>
               <h4>Adicionales Disponibles:</h4>
               <AdicionalesList>
-                {availableAdicionales.length > 0 ? (
-                  availableAdicionales.map((adicional) => {
-                    const isSelected = selectedAdicionales.some(
-                      (item) => item.adicionalId === adicional._id
-                    );
-                    const currentQuantity = isSelected
-                      ? selectedAdicionales.find(
-                          (item) => item.adicionalId === adicional._id
-                        ).quantity
-                      : 0;
+                {availableAdicionales.length > 0
+                  ? availableAdicionales.map((adicional) => {
+                      const isSelected = selectedAdicionales.some(
+                        (item) => item.adicionalId === adicional._id
+                      );
+                      const currentQuantity = isSelected
+                        ? selectedAdicionales.find(
+                            (item) => item.adicionalId === adicional._id
+                          ).quantity
+                        : 0;
 
-                    return (
-                      <AdicionalItem key={adicional._id}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) =>
-                              handleAdicionalSelection(
-                                adicional._id,
-                                e.target.checked
-                              )
-                            }
-                          />
-                          {adicional.name} (ARS {adicional.price.toFixed(2)})
-                        </label>
-                        {isSelected && (
-                          <input
-                            type="number"
-                            min="1"
-                            value={currentQuantity}
-                            onChange={(e) =>
-                              handleAdicionalQuantityChange(
-                                adicional._id,
-                                parseInt(e.target.value)
-                              )
-                            }
-                          />
-                        )}
-                      </AdicionalItem>
-                    );
-                  })
-                ) : (
-                  <p>No hay adicionales disponibles.</p>
-                )}
+                      return (
+                        <AdicionalItem key={adicional._id}>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) =>
+                                handleAdicionalSelection(
+                                  adicional._id,
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            {adicional.name} (ARS {adicional.price.toFixed(2)})
+                          </label>
+                          {isSelected && (
+                            <input
+                              type="number"
+                              min="1"
+                              value={currentQuantity}
+                              onChange={(e) =>
+                                handleAdicionalQuantityChange(
+                                  adicional._id,
+                                  parseInt(e.target.value)
+                                )
+                              }
+                            />
+                          )}
+                        </AdicionalItem>
+                      );
+                    })
+                  : renderMessage("info", "No hay adicionales disponibles.")}
               </AdicionalesList>
-              {/* Display the total cost of selected adicionales */}
-                {selectedAdicionales.length > 0 && (
-                  <AdicionalesTotal>
-                    Total Adicionales: ARS {totalAdicionalesCost.toFixed(2)}
-                  </AdicionalesTotal>
-                )}
+              {selectedAdicionales.length > 0 && (
+                <AdicionalesTotal>
+                  Total Adicionales: ARS {totalAdicionalesCost.toFixed(2)}
+                </AdicionalesTotal>
+              )}
             </AdicionalesSection>
 
-            {adicionalesError && (
-              <p style={{ color: "red" }}>{adicionalesError}</p>
-            )}
+            {adicionalesError && renderMessage("danger", adicionalesError)}
             <ModalActions>
               <Button
                 className="secondary"
@@ -1030,14 +1243,147 @@ function ReservationDetailPageEmp() { // Cambia el nombre del componente
               >
                 Cancelar
               </Button>
-              <Button onClick={confirmAddAdicionales} disabled={adicionalesLoading}>
+              <Button
+                onClick={confirmAddAdicionales}
+                disabled={adicionalesLoading}
+              >
                 {adicionalesLoading ? "Guardando..." : "Guardar Adicionales"}
               </Button>
             </ModalActions>
           </ModalContent>
         </ModalOverlay>
       )}
-      
+
+      {/* Nuevo Modal para Selección de Vehículo de Reemplazo */}
+      {showReplacementModal && (
+        <ModalOverlay>
+          <ModalContent>
+            <h2>{replacementModalMessage}</h2>
+            {replacementVehicles.higherOrEqualPrice.length > 0 ||
+            replacementVehicles.lowerPrice.length > 0 ? (
+              <>
+                <p>Selecciona un vehículo de reemplazo de la lista:</p>
+                <VehicleListContainer>
+                  {replacementVehicles.higherOrEqualPrice.length > 0 && (
+                    <>
+                      <VehicleTypeHeader>
+                        Vehículos de Mayor o Igual Precio:
+                      </VehicleTypeHeader>
+                      {replacementVehicles.higherOrEqualPrice.map((v) => (
+                        <VehicleItem
+                          key={v._id}
+                          $isSelected={selectedReplacementVehicleId === v._id}
+                          onClick={() => setSelectedReplacementVehicleId(v._id)}
+                        >
+                          <img
+                            src={
+                              v.photoUrl ||
+                              `https://placehold.co/80x60/cccccc/333333?text=Vehiculo`
+                            }
+                            alt={`${v.brand} ${v.model}`}
+                          />
+                          <div>
+                            <h5>
+                              {v.brand} {v.model} ({v.licensePlate})
+                            </h5>
+                            <p>Precio/Día: ARS {v.pricePerDay.toFixed(2)}</p>
+                            <p>
+                              Tipo: {v.type} | Capacidad: {v.capacity} |
+                              Transmisión: {v.transmission}
+                            </p>
+                          </div>
+                        </VehicleItem>
+                      ))}
+                    </>
+                  )}
+
+                  {replacementVehicles.lowerPrice.length > 0 && (
+                    <>
+                      <VehicleTypeHeader>
+                        Vehículos de Menor Precio:
+                      </VehicleTypeHeader>
+                      {replacementVehicles.lowerPrice.map((v) => (
+                        <VehicleItem
+                          key={v._id}
+                          $isSelected={selectedReplacementVehicleId === v._id}
+                          onClick={() => setSelectedReplacementVehicleId(v._id)}
+                        >
+                          <img
+                            src={
+                              v.photoUrl ||
+                              `https://placehold.co/80x60/cccccc/333333?text=Vehiculo`
+                            }
+                            alt={`${v.brand} ${v.model}`}
+                          />
+                          <div>
+                            <h5>
+                              {v.brand} {v.model} ({v.licensePlate})
+                            </h5>
+                            <p>Precio/Día: ARS {v.pricePerDay.toFixed(2)}</p>
+                            <p>
+                              Tipo: {v.type} | Capacidad: {v.capacity} |
+                              Transmisión: {v.transmission}
+                            </p>
+                          </div>
+                        </VehicleItem>
+                      ))}
+                    </>
+                  )}
+                </VehicleListContainer>
+                {statusChangeError &&
+                  renderMessage("danger", statusChangeError)}
+                <ModalActions>
+                  <Button
+                    className="secondary"
+                    onClick={() => {
+                      setShowReplacementModal(false);
+                      setSelectedReplacementVehicleId(null);
+                      setStatusChangeError(null); // Limpiar errores del modal
+                    }}
+                    disabled={replacementLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      handleChangeStatus(
+                        "picked_up",
+                        selectedReplacementVehicleId
+                      )
+                    }
+                    disabled={
+                      !selectedReplacementVehicleId || replacementLoading
+                    }
+                  >
+                    {replacementLoading
+                      ? "Confirmando..."
+                      : "Confirmar Entrega con Reemplazo"}
+                  </Button>
+                </ModalActions>
+              </>
+            ) : (
+              // Escenario: No hay vehículos de reemplazo disponibles
+              <>
+                {renderMessage(
+                  "danger",
+                  "No hay vehículos de reemplazo disponibles en esta sucursal."
+                )}
+                <ModalActions>
+                  <Button
+                    onClick={() => {
+                      setShowReplacementModal(false);
+                      setSelectedReplacementVehicleId(null);
+                      setStatusChangeError(null); // Limpiar errores del modal
+                    }}
+                  >
+                    Cerrar
+                  </Button>
+                </ModalActions>
+              </>
+            )}
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </PageContainer>
   );
 }

@@ -1,5 +1,3 @@
-// backend/routes/reservationRoutes.js
-
 const express = require("express");
 const router = express.Router();
 
@@ -12,35 +10,49 @@ const {
   updateReservationStatus,
   updateReservationAdicionales,
   getTotalRevenue,
-  getAllReservationsForReport, 
+  getAllReservationsForReport,
+  pickupReservation, // <-- ¡NUEVO: Importar la función!
 } = require("../controllers/reservationController");
 
 const {
   processReservationPayment,
 } = require("../controllers/paymentController");
 const { protect, authorize } = require("../middleware/authMiddleware");
+
+// Rutas de reportes (más específicas, deben ir antes de :id)
 router.get("/total-revenue", protect, getTotalRevenue);
 router.get("/report", protect, getAllReservationsForReport);
-// Nueva ruta para crear una reserva
+
+// Rutas para buscar por número de reserva (más específica que :id)
+router
+  .route("/byNumber/:reservationNumber")
+  .get(protect, getReservationByNumber);
+
+// ¡NUEVA RUTA PARA LA ENTREGA DE VEHÍCULOS (PICKUP)!
+// Esta ruta es específica para marcar una reserva como retirada.
+router
+  .route("/:id/pickup")
+  .put(protect, authorize("employee", "admin"), pickupReservation); // <-- ¡NUEVA RUTA!
+
+// Rutas para crear una reserva
 router.route("/").post(protect, createReservation);
 
-// Rutas para historial de reservas
+// Rutas para historial de reservas del usuario
 router.route("/myreservations").get(protect, getMyReservations);
 
-// Detalle reserva
+// Rutas para el detalle de una reserva por ID (genérica, debe ir después de las más específicas)
 router.route("/:id").get(protect, getReservationById);
-// REMOVED: .delete(protect, cancelReservation); // <-- ELIMINA ESTA PARTE O COMENTALA
 
 // Pagar reserva
 router.route("/:id/pay").post(protect, processReservationPayment);
 
-// NUEVA RUTA CORRECTA PARA CANCELAR RESERVA
-// Método: PUT
-// URL: /api/reservations/:id/cancel
-router.route("/:id/cancel").put(protect, cancelReservation); // <-- AÑADE ESTA LÍNEA
+// Ruta para cancelar reserva
+router.route("/:id/cancel").put(protect, cancelReservation);
 
-router.route("/byNumber/:reservationNumber").get(protect, getReservationByNumber);
-
+// Ruta para actualizar el estado de una reserva (para 'returned', 'completed', etc.)
 router.route("/:id/status").put(protect, updateReservationStatus);
+
+// Ruta para actualizar los adicionales de una reserva
 router.route("/:id/adicionales").put(protect, updateReservationAdicionales);
+
 module.exports = router;

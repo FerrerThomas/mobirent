@@ -23,16 +23,17 @@ import ResetPassword from "./components/ResetPassword.jsx";
 import "./App.css";
 import Navbar from "./components/Navbar";
 
-import CreateReservationPage from './components/CreateReservationPage.jsx'; // <--- ¡IMPORTA ESTO AQUÍ!
+import CreateReservationPage from "./components/CreateReservationPage.jsx"; // <--- ¡IMPORTA ESTO AQUÍ!
 import PaymentPage from "./components/PaymentPage.jsx";
-import PaymentSuccess from './components/PaymentSuccess.jsx';
-import MyReservationsPage from './components/MyReservationsPage.jsx';
-import ReservationDetailPage from './components/ReservationDetailPage.jsx';
-import EmployeeManagementPage from './components/EmployeeManagementPage.jsx';
-import PanelControl from './components/PanelControl.jsx';
+import PaymentSuccess from "./components/PaymentSuccess.jsx";
+import MyReservationsPage from "./components/MyReservationsPage.jsx";
+import ReservationDetailPage from "./components/ReservationDetailPage.jsx";
+import EmployeeManagementPage from "./components/EmployeeManagementPage.jsx";
+import PanelControl from "./components/PanelControl.jsx";
 import ReservationStatusPage from "./components/ReservationStatusPage.jsx";
 import AdicionalManagementPage from "./components/AdicionalManagementPage.jsx";
 import ReservationDetailPageEmp from "./components/ReservationDetailPageEmp.jsx";
+import { ToastContainer, toast } from "react-toastify";
 
 // Componente de Ruta Protegida 29/5 micha
 // **ESTA ES LA ÚNICA Y CORRECTA DECLARACIÓN DE ProtectedRoute**
@@ -76,7 +77,9 @@ function App() {
     <Router>
       {/* El Navbar DEBE ESTAR DENTRO DEL AuthProvider para que pueda usar useAuth si lo necesita. */}
       {/* Si tu Navbar no necesita useAuth, puede quedarse fuera, pero es más común que sí lo use (ej. para mostrar el nombre de usuario o botón de logout) */}
-      <AuthProvider> {/* <-- El AuthProvider debería envolver todo lo que lo necesita, incluyendo el Navbar si este último lo utiliza */}
+      <AuthProvider>
+        {" "}
+        {/* <-- El AuthProvider debería envolver todo lo que lo necesita, incluyendo el Navbar si este último lo utiliza */}
         <Navbar /> {/* <--- Navbar movido dentro del AuthProvider */}
         <Routes>
           {/* Rutas Públicas */}
@@ -105,12 +108,14 @@ function App() {
 
           {/* Rutas Protegidas que requieren autenticación */}
           {/* Aquí puedes agrupar todas las rutas que usen AppProtectedRoute */}
-          
+
           {/* RUTA PARA CREAR UNA RESERVA */}
           <Route
             path="/create-reservation" // <--- ¡NUEVA RUTA!
             element={
-              <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}> {/* Permite a usuarios, empleados y admins crear reservas */}
+              <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}>
+                {" "}
+                {/* Permite a usuarios, empleados y admins crear reservas */}
                 <CreateReservationPage />
               </AppProtectedRoute>
             }
@@ -118,7 +123,7 @@ function App() {
 
           {/* PAGAR RESERVA */}
           <Route
-            path="/pay/:reservationId"          // <--- aquí
+            path="/pay/:reservationId" // <--- aquí
             element={
               <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}>
                 <PaymentPage />
@@ -130,17 +135,17 @@ function App() {
           <Route
             path="/payment-success/:reservationId"
             element={
-              <AppProtectedRoute allowedRoles={['user','employee','admin']}>
+              <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}>
                 <PaymentSuccess />
               </AppProtectedRoute>
-          }
+            }
           />
 
           {/* Rutas protegidas para “Mis Reservas” y detalle */}
           <Route
             path="/my-reservations"
             element={
-              <AppProtectedRoute allowedRoles={['user','employee','admin']}>
+              <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}>
                 <MyReservationsPage />
               </AppProtectedRoute>
             }
@@ -148,7 +153,7 @@ function App() {
           <Route
             path="/reservations/:id"
             element={
-              <AppProtectedRoute allowedRoles={['user','employee','admin']}>
+              <AppProtectedRoute allowedRoles={["user", "employee", "admin"]}>
                 <ReservationDetailPage />
               </AppProtectedRoute>
             }
@@ -209,7 +214,7 @@ function App() {
           <Route
             path="/panel-de-control" // Puedes ajustar esta ruta si lo deseas
             element={
-              <AppProtectedRoute allowedRoles={["employee","admin"]}>
+              <AppProtectedRoute allowedRoles={["employee", "admin"]}>
                 <PanelControl />
               </AppProtectedRoute>
             }
@@ -241,6 +246,7 @@ function App() {
           {/* Ruta Catch-all: Cualquier otra ruta no definida redirige a la página principal (Home) */}
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
+        <ToastContainer />
       </AuthProvider>
     </Router>
   );
