@@ -11,18 +11,18 @@ const {
   updateReservationAdicionales,
   getTotalRevenue,
   getAllReservationsForReport,
-  pickupReservation, // <-- ¡NUEVO: Importar la función!
+  pickupReservation,
+  listAllReservations, // <-- ¡NUEVO: Importar la función!
 } = require("../controllers/reservationController");
 
 const {
   processReservationPayment,
 } = require("../controllers/paymentController");
 const { protect, authorize } = require("../middleware/authMiddleware");
-
+router.get("/all-reservations", protect, listAllReservations);
 // Rutas de reportes (más específicas, deben ir antes de :id)
 router.get("/total-revenue", protect, getTotalRevenue);
 router.get("/report", protect, getAllReservationsForReport);
-
 // Rutas para buscar por número de reserva (más específica que :id)
 router
   .route("/byNumber/:reservationNumber")

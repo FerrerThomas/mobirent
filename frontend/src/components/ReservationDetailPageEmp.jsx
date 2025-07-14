@@ -1049,8 +1049,7 @@ function ReservationDetailPageEmp() {
                 </ActionButton>
               )}
 
-              {(reservation.status === "confirmed" ||
-                reservation.status === "picked_up") && (
+              {(reservation.status === "confirmed" ) && (
                 <ActionButton
                   onClick={handleAddAdicionales}
                   $bgColor="#28a745"

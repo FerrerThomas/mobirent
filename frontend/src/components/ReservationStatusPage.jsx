@@ -1,9 +1,11 @@
 // frontend/src/pages/ReservationStatusPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import axiosInstance from "../api/axiosInstance";
+import { toast } from "react-toastify"; // Para notificaciones
 
+// Styled Components (Mantengo los que ya tenías)
 const PageContainer = styled.div`
   background-color: #f0f2f5;
   min-height: 100vh;
@@ -21,7 +23,7 @@ const PageContainer = styled.div`
 
 const MainContent = styled.div`
   width: 100%;
-  max-width: 800px;
+  max-width: 900px; /* Ajustado para dar más espacio al listado general */
   padding: 40px;
   background-color: #fff;
   border-radius: 15px;
@@ -140,6 +142,7 @@ const ErrorMessage = styled.div`
   border: 1px solid #f5c6cb;
   margin-top: 20px;
   font-size: 1em;
+  text-align: center; /* Centrar el texto */
 `;
 
 const ReservationCard = styled.div`
@@ -147,13 +150,17 @@ const ReservationCard = styled.div`
   border: 2px solid #e0e0e0;
   border-radius: 15px;
   padding: 30px;
-  margin-top: 30px;
+  margin-top: 30px; /* Para separar de la sección de búsqueda */
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
 
   &:hover {
     transform: translateY(-5px);
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+  }
+
+  @media (max-width: 768px) {
+    padding: 20px;
   }
 `;
 
@@ -268,6 +275,7 @@ const BackButton = styled.button`
   font-weight: bold;
   transition: all 0.3s ease;
   margin-top: 30px;
+  align-self: flex-start; /* Para que no ocupe todo el ancho si MainContent es flex */
 
   &:hover {
     background-color: #5a6268;
@@ -275,12 +283,74 @@ const BackButton = styled.button`
   }
 `;
 
+// Estilos para el listado general
+const ReservationListSection = styled.div`
+  margin-top: 60px; /* Espacio para separar de la sección de búsqueda */
+  padding-top: 40px;
+  border-top: 1px dashed #e0e0e0;
+  text-align: center;
+`;
+
+const ListTitle = styled.h2`
+  font-size: 2.2em;
+  color: #007bff;
+  margin-bottom: 30px;
+  text-align: center;
+`;
+
+const ReservationGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr; /* Una columna para el listado simple */
+  gap: 25px;
+  margin-top: 20px;
+`;
+
+const NoResultsMessage = styled.div`
+  padding: 30px;
+  text-align: center;
+  color: #666;
+  font-size: 1.2em;
+  background-color: #f8f8f8;
+  border-radius: 10px;
+  margin-top: 30px;
+  border: 1px dashed #ddd;
+`;
+
+const Loader = () => (
+  <div style={{ textAlign: "center", padding: "20px" }}>
+    <p>Cargando reservas...</p>
+    <div
+      style={{
+        border: "4px solid #f3f3f3",
+        borderTop: "4px solid #007bff",
+        borderRadius: "50%",
+        width: "40px",
+        height: "40px",
+        animation: "spin 1s linear infinite",
+        margin: "10px auto",
+      }}
+    ></div>
+    <style>{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+);
+
 function ReservationStatusPage() {
   const navigate = useNavigate();
+  // Estado para la búsqueda individual
   const [reservationNumber, setReservationNumber] = useState("");
-  const [reservation, setReservation] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [reservation, setReservation] = useState(null); // Contiene la reserva encontrada por número
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [errorSearch, setErrorSearch] = useState(null);
+
+  // Nuevo estado para el listado general de reservas
+  const [allReservations, setAllReservations] = useState([]);
+  const [loadingAllReservations, setLoadingAllReservations] = useState(true);
+  const [errorAllReservations, setErrorAllReservations] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -289,16 +359,17 @@ function ReservationStatusPage() {
     }
   }, [navigate]);
 
+  // Función para buscar una reserva por número
   const handleSearch = async () => {
     if (!reservationNumber.trim()) {
-      setError("Por favor, ingresa un número de reserva.");
-      setReservation(null);
+      setErrorSearch("Por favor, ingresa un número de reserva.");
+      setReservation(null); // Limpiar la reserva si el campo está vacío
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setReservation(null);
+    setLoadingSearch(true);
+    setErrorSearch(null);
+    setReservation(null); // Limpiar resultado anterior al iniciar nueva búsqueda
 
     try {
       const response = await axiosInstance.get(
@@ -307,20 +378,64 @@ function ReservationStatusPage() {
       setReservation(response.data);
     } catch (err) {
       console.error("Error al buscar reserva:", err);
-      setError(
+      // Si la reserva no se encuentra, el backend podría enviar 404.
+      // Asegurarse de que `reservation` sea `null` para que el listado se muestre de nuevo.
+      setReservation(null);
+      setErrorSearch(
         err.response?.data?.message ||
           "Error al buscar la reserva. Asegúrate de que el número es correcto y tienes permisos."
       );
     } finally {
-      setLoading(false);
+      setLoadingSearch(false);
     }
   };
 
-  const handleViewReservation = () => {
-    if (reservation) {
-      // Navega a la nueva página de detalles con el ID de la reserva
-      navigate(`/reservation-detail-emp/${reservation._id}`);
+  // Función para limpiar la búsqueda individual y mostrar el listado de nuevo
+  const clearSearch = () => {
+    setReservationNumber("");
+    setReservation(null);
+    setErrorSearch(null);
+    // Opcional: Volver a cargar el listado si se ha modificado algo, o si quieres asegurarte que está actualizado
+    // fetchAllReservations();
+  };
+
+
+  // Función para obtener todas las reservas
+  const fetchAllReservations = useCallback(async () => {
+    setLoadingAllReservations(true);
+    setErrorAllReservations(null);
+    setAllReservations([]);
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      setLoadingAllReservations(false);
+      return;
     }
+
+    try {
+      const response = await axiosInstance.get("/reservations/all-reservations", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAllReservations(response.data.reservations || []);
+    } catch (err) {
+      console.error("Error al cargar listado de reservas:", err);
+      setErrorAllReservations(
+        err.response?.data?.message || "Error al cargar el listado general de reservas."
+      );
+      toast.error(err.response?.data?.message || "Error al cargar el listado general de reservas.");
+    } finally {
+      setLoadingAllReservations(false);
+    }
+  }, [navigate]);
+
+  // useEffect para cargar todas las reservas al montar el componente
+  useEffect(() => {
+    fetchAllReservations();
+  }, [fetchAllReservations]);
+
+  const handleViewReservation = (id) => {
+    navigate(`/reservation-detail-emp/${id}`);
   };
 
   const handleGoBack = () => {
@@ -331,7 +446,7 @@ function ReservationStatusPage() {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString("es-AR", {
       year: "numeric",
-      month: "long",
+      month: "numeric",
       day: "numeric",
     });
   };
@@ -339,21 +454,27 @@ function ReservationStatusPage() {
   return (
     <PageContainer>
       <MainContent>
-        <PageTitle>Buscar Reserva</PageTitle>
+        <PageTitle>Gestionar Reservas</PageTitle>
         <PageSubText>
-          Ingresa el número de reserva para buscar y gestionar su estado.
+          Busca una reserva específica o revisa el listado completo.
         </PageSubText>
 
+        {/* Sección de búsqueda por número de reserva */}
         <SearchContainer>
           <InputLabel htmlFor="reservationNumber">
-            Número de reserva:
+            Buscar por número de reserva:
           </InputLabel>
           <InputGroup>
             <input
               id="reservationNumber"
               type="text"
               value={reservationNumber}
-              onChange={(e) => setReservationNumber(e.target.value)}
+              onChange={(e) => {
+                setReservationNumber(e.target.value);
+                if (e.target.value === "") { // Si el campo se vacía, limpiar la búsqueda
+                  clearSearch();
+                }
+              }}
               placeholder="Ej: RES-1678901234567-890"
               onKeyPress={(e) => {
                 if (e.key === "Enter") {
@@ -361,19 +482,31 @@ function ReservationStatusPage() {
                 }
               }}
             />
-            <SearchButton onClick={handleSearch} disabled={loading}>
-              {loading ? "Buscando..." : "Buscar"}
+            <SearchButton onClick={handleSearch} disabled={loadingSearch}>
+              {loadingSearch ? "Buscando..." : "Buscar"}
             </SearchButton>
           </InputGroup>
+          {reservationNumber && reservation && ( // Muestra el botón de limpiar solo si hay texto y una reserva encontrada
+            <button onClick={clearSearch} style={{
+              marginTop: '10px',
+              padding: '8px 15px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+            }}>Limpiar Búsqueda</button>
+          )}
         </SearchContainer>
 
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+        {errorSearch && <ErrorMessage>{errorSearch}</ErrorMessage>}
 
-        {reservation && (
+        {/* Tarjeta de resultado de la búsqueda individual */}
+        {reservation && ( // Solo muestra esta tarjeta si una reserva fue encontrada
           <ReservationCard>
             <CardHeader>
               <ReservationNumber>
-                #{reservation.reservationNumber}
+                {reservation.reservationNumber}
               </ReservationNumber>
               <StatusBadge status={reservation.status}>
                 {reservation.status.replace("_", " ")}
@@ -385,47 +518,89 @@ function ReservationStatusPage() {
                 <p>
                   <strong>Usuario:</strong>{" "}
                   {reservation.user
-                    ? `${reservation.user.username}`
+                    ? `${reservation.user.username} (${reservation.user.email})`
                     : "N/A"}
                 </p>
                 <p>
-                  <strong>Email:</strong>{" "}
-                  {reservation.user ? reservation.user.email : "N/A"}
-                </p>
-                <p>
-                  <strong>Fecha de inicio:</strong>{" "}
-                  {formatDate(reservation.startDate)}
-                </p>
-                <p>
-                  <strong>Fecha de fin:</strong>{" "}
-                  {formatDate(reservation.endDate)}
+                  <strong>Vehículo:</strong>{" "}
+                  {reservation.vehicle
+                    ? `${reservation.vehicle.brand} ${reservation.vehicle.model} (${reservation.vehicle.licensePlate})`
+                    : "N/A"}
                 </p>
               </InfoItem>
 
               <InfoItem>
                 <p>
-                  <strong>Vehículo:</strong>{" "}
-                  {reservation.vehicle
-                    ? `${reservation.vehicle.brand} ${reservation.vehicle.model}`
-                    : "N/A"}
+                  <strong>Período:</strong> {formatDate(reservation.startDate)} al{" "}
+                  {formatDate(reservation.endDate)}
                 </p>
                 <p>
-                  <strong>Patente:</strong>{" "}
-                  {reservation.vehicle ? reservation.vehicle.licensePlate : "N/A"}
-                </p>
-                <p>
-                  <strong>Costo total:</strong> ARS {reservation.totalCost.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Creada:</strong> {formatDate(reservation.createdAt)}
+                  <strong>Costo Total:</strong> ARS {reservation.totalCost.toFixed(2)}
                 </p>
               </InfoItem>
             </CardInfo>
 
-            <ViewButton onClick={handleViewReservation}>
-              Ver Reserva Completa
+            <ViewButton onClick={() => handleViewReservation(reservation._id)}>
+              Ver Detalles
             </ViewButton>
           </ReservationCard>
+        )}
+
+        {/* Sección de listado de todas las reservas */}
+        {/* Solo se muestra si NO hay una reserva individual encontrada */}
+        {!reservation && (
+          <ReservationListSection>
+            <ListTitle>Todas las Reservas</ListTitle>
+
+            {loadingAllReservations ? (
+              <Loader />
+            ) : errorAllReservations ? (
+              <ErrorMessage>{errorAllReservations}</ErrorMessage>
+            ) : allReservations.length > 0 ? (
+              <ReservationGrid>
+                {allReservations.map((res) => (
+                  <ReservationCard key={res._id}>
+                    <CardHeader>
+                      <ReservationNumber>
+                        {res.reservationNumber}
+                      </ReservationNumber>
+                      <StatusBadge status={res.status}>
+                        {res.status.replace("_", " ")}
+                      </StatusBadge>
+                    </CardHeader>
+                    {/*<CardInfo>
+                      <InfoItem>
+                        <p>
+                          <strong>Usuario:</strong>{" "}
+                          {res.user ? `${res.user.username}` : "N/A"}
+                        </p>
+                        <p>
+                          <strong>Vehículo:</strong>{" "}
+                          {res.vehicle
+                            ? `${res.vehicle.brand} ${res.vehicle.model}`
+                            : "N/A"}
+                        </p>
+                      </InfoItem>
+                      <InfoItem>
+                        <p>
+                          <strong>Período:</strong> {formatDate(res.startDate)} al{" "}
+                          {formatDate(res.endDate)}
+                        </p>
+                        <p>
+                          <strong>Costo:</strong> ARS {res.totalCost.toFixed(2)}
+                        </p>
+                      </InfoItem>
+                    </CardInfo>*/}
+                    <ViewButton onClick={() => handleViewReservation(res._id)}>
+                      Ver Detalle
+                    </ViewButton>
+                  </ReservationCard>
+                ))}
+              </ReservationGrid>
+            ) : (
+              <NoResultsMessage>No hay reservas para mostrar.</NoResultsMessage>
+            )}
+          </ReservationListSection>
         )}
 
         <BackButton onClick={handleGoBack}>
