@@ -1133,6 +1133,51 @@ const pickupReservation = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get a simple list of all reservations
+// @route   GET /api/reservations/list
+// @access  Private/Employee/Admin
+const listAllReservations = asyncHandler(async (req, res) => {
+  // Construir el objeto de consulta para Mongoose (inicialmente vacío para traer todo)
+  const query = {};
+
+  // Opcional: Se pueden añadir filtros simples si se desean para el listado,
+  // pero la solicitud original pedia solo "listar todas".
+  // Si en el futuro se quiere filtrar por status, etc., se añadirían aquí:
+  // if (req.query.status) {
+  //   query.status = req.query.status;
+  // }
+  // if (req.query.userEmail) {
+  //   const user = await User.findOne({ email: req.query.userEmail });
+  //   if (user) query.user = user._id;
+  //   else return res.status(200).json({ success: true, reservations: [] });
+  // }
+  // ... cualquier otro filtro simple necesario para la vista de lista
+
+  // Paginación (opcional, pero buena práctica para listados grandes)
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20; // Un límite mayor por defecto para listas simples
+  const startIndex = (page - 1) * limit;
+
+  const totalCount = await Reservation.countDocuments(query);
+
+  const reservations = await Reservation.find(query)
+    .populate("user", "username email") // Popula solo username y email del usuario
+    .populate("vehicle", "brand model licensePlate") // Popula brand, model y licensePlate del vehículo
+    .sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente (las más recientes primero)
+    .skip(startIndex)
+    .limit(limit);
+
+  const totalPages = Math.ceil(totalCount / limit);
+
+  res.status(200).json({
+    success: true,
+    totalCount,
+    currentPage: page,
+    totalPages,
+    reservations,
+  });
+});
+
 module.exports = {
   createReservation,
   getMyReservations,
@@ -1145,4 +1190,5 @@ module.exports = {
   getTotalRevenue,
   getAllReservationsForReport,
   pickupReservation,
+  listAllReservations,
 };

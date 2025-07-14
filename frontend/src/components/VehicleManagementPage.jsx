@@ -922,26 +922,6 @@ function VehicleManagementPage() {
                             ? "Marcar No Disponible"
                             : "Marcar Disponible"}
                         </ActionButton>
-
-                        <ActionButton
-                          onClick={() =>
-                            handleStatusToggle(
-                              vehicle._id,
-                              vehicle.isReserved,
-                              "reserved"
-                            )
-                          }
-                          statusColor={
-                            vehicle.isReserved ? "#dc3545" : "#f7b32b"
-                          }
-                          disabled={
-                            vehicle.needsMaintenance || vehicle.isAvailable
-                          }
-                        >
-                          {vehicle.isReserved
-                            ? "Liberar Reserva"
-                            : "Marcar Reservado"}
-                        </ActionButton>
                       </>
                     )}
                   </VehicleActions>

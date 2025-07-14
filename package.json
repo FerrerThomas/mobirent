@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "mongoose-sequence": "^6.0.1",
+    "react-toastify": "^11.0.5",
     "recharts": "^3.0.2"
   }
 }
