@@ -306,22 +306,7 @@ const updateVehicleStatus = asyncHandler(async (req, res) => {
     // pero siempre respetando que si está en mantenimiento, isAvailable es false.
     if (isAvailable !== undefined && userRole === "admin") {
       // **NUEVA VALIDACIÓN: NO permitir marcar como NO DISPONIBLE si hay reservas futuras**
-      if (isAvailable === false && vehicle.isAvailable === true) {
-        // Si el intento es cambiar de DISPONIBLE a NO DISPONIBLE
-        const now = new Date();
-        const futureReservations = await Reservation.findOne({
-          vehicle: vehicle._id,
-          status: { $in: ["confirmed", "picked_up"] }, // Considerar reservas confirmadas y en curso
-          startDate: { $gte: now }, // Cuya fecha de inicio sea hoy o en el futuro
-        });
-
-        if (futureReservations) {
-          res.status(400);
-          throw new Error(
-            "No se puede marcar el vehículo como no disponible porque tiene reservas futuras activas."
-          );
-        }
-      }
+      
 
       if (vehicle.needsMaintenance && isAvailable === true) {
         // Si está en mantenimiento, no puede estar disponible.
